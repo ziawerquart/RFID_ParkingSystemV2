@@ -6,14 +6,26 @@
 #include <QMessageBox>
 #include <QScrollBar>
 #include <QDebug>
+#include <QDateTime>
 //#include <ioportManager.h>
 #include<rfidWidget/ioportManager.h>
+
+static const char kTagSignature1 = 'P';
+static const char kTagSignature2 = 'K';
+static const int kUserBlock1 = 1;
+static const int kUserBlock2 = 2;
+static const int kHourFee = 5;
 
 IEEE14443ControlWidget::IEEE14443ControlWidget(QWidget *parent) :
     QWidget(parent),
     ui(new Ui::IEEE14443ControlWidget),
     commPort(NULL),
-    recvStatus(0)
+    autoSearchTimer(NULL),
+    recvStatus(0),
+    waitingReply(false),
+    tagAuthenticated(false),
+    pendingReadBlock(-1),
+    pendingWriteBlock(-1)
 {
     ui->setupUi(this);
     ui->dataEdit->setOverwriteMode(true);
@@ -29,6 +41,9 @@ IEEE14443ControlWidget::IEEE14443ControlWidget(QWidget *parent) :
 
     connect(this, SIGNAL(recvPackage(QByteArray)), this, SLOT(onRecvedPackage(QByteArray)));
 //    connect(ui->statusList->verticalScrollBar(), SIGNAL(rangeChanged(int,int)), this, SLOT(onStatusListScrollRangeChanced(int,int)));
+    autoSearchTimer = new QTimer(this);
+    autoSearchTimer->setInterval(500);
+    connect(autoSearchTimer, SIGNAL(timeout()), this, SLOT(onAutoSearchTimeout()));
     resetStatus();
 }
 
@@ -54,6 +69,7 @@ bool IEEE14443ControlWidget::start(const QString &port)
         readTimer = new QTimer(this);   //设置读取计时器
         readTimer->start(100);  //设置延时为100ms
         connect(readTimer,SIGNAL(timeout()),this,SLOT(onPortDataReady()));
+        startAutoSearch();
         return true;
     }
     else {
@@ -72,6 +88,7 @@ bool IEEE14443ControlWidget::stop()
         delete commPort;
     }
     commPort = NULL;
+    stopAutoSearch();
     return true;
 }
 
@@ -85,6 +102,7 @@ bool IEEE14443ControlWidget::sendData(const QByteArray &data)
         //qDebug()<<"send data = "<<data.toHex();
         //qDebug()<<"rawPackage = "<<IEEE1443Package(data).toRawPackage().toHex();
         commPort->write(IEEE1443Package(data).toRawPackage());
+        waitingReply = true;
     }
     return true;
 }
@@ -110,6 +128,252 @@ void IEEE14443ControlWidget::resetStatus()
     ui->dataEdit->setData(empty);
     resetBlockList(1, 63, 4);
     ui->resultLabel->setText("");
+    ui->balanceEdit->setText("");
+    ui->parkingStatusLabel->setText("");
+    waitingReply = false;
+    tagAuthenticated = false;
+    currentCardId.clear();
+    lastBlock1.clear();
+    lastBlock2.clear();
+    pendingReadBlock = -1;
+    pendingWriteBlock = -1;
+    currentInfo = TagInfo();
+    pendingWriteInfo = TagInfo();
+}
+
+void IEEE14443ControlWidget::startAutoSearch()
+{
+    if(autoSearchTimer && !autoSearchTimer->isActive())
+        autoSearchTimer->start();
+}
+
+void IEEE14443ControlWidget::stopAutoSearch()
+{
+    if(autoSearchTimer)
+        autoSearchTimer->stop();
+}
+
+void IEEE14443ControlWidget::requestSearch()
+{
+    if(waitingReply)
+        return;
+    lastSendPackage = IEEE1443Package(0, IEEE1443Package::SearchCard, 0x52).toPurePackage();
+    sendData(lastSendPackage);
+}
+
+void IEEE14443ControlWidget::requestAntiColl()
+{
+    if(waitingReply)
+        return;
+    lastSendPackage = IEEE1443Package(0, IEEE1443Package::AntiColl, 0x04).toPurePackage();
+    sendData(lastSendPackage);
+}
+
+void IEEE14443ControlWidget::requestSelect(const QByteArray &cardId)
+{
+    if(waitingReply)
+        return;
+    IEEE1443Package pkg(0, IEEE1443Package::SelectCard, cardId);
+    lastSendPackage = pkg.toPurePackage();
+    sendData(lastSendPackage);
+}
+
+void IEEE14443ControlWidget::requestAuth(quint8 blockNumber)
+{
+    QByteArray authInfo;
+    authInfo.append(0x60);
+    authInfo.append((char)blockNumber);
+    authInfo.append(ui->authKeyEdit->data());
+    if(authInfo.size() != 8)
+    {
+        QMessageBox::warning(this, tr("Warning"), tr("auth key error"));
+        return;
+    }
+    IEEE1443Package pkg(0, IEEE1443Package::Authentication, authInfo);
+    lastSendPackage = pkg.toPurePackage();
+    sendData(lastSendPackage);
+}
+
+void IEEE14443ControlWidget::requestRead(quint8 blockNumber)
+{
+    pendingReadBlock = blockNumber;
+    IEEE1443Package pkg(0, 0x4B, (char)blockNumber);
+    lastSendPackage = pkg.toPurePackage();
+    sendData(lastSendPackage);
+}
+
+void IEEE14443ControlWidget::requestWrite(quint8 blockNumber, const QByteArray &data)
+{
+    if(data.size() != 16)
+    {
+        QMessageBox::warning(this, tr("Warning"), tr("write data error"));
+        return;
+    }
+    pendingWriteBlock = blockNumber;
+    QByteArray writeInfo;
+    writeInfo.append((char)blockNumber);
+    writeInfo.append(data);
+    IEEE1443Package pkg(0, IEEE1443Package::WriteCard, writeInfo);
+    lastSendPackage = pkg.toPurePackage();
+    sendData(lastSendPackage);
+}
+
+static char vehicleCodeFromText(const QString &text)
+{
+    if(text == "Sedan")
+        return 1;
+    if(text == "SUV")
+        return 2;
+    if(text == "Truck")
+        return 3;
+    if(text == "Electric")
+        return 4;
+    return 0;
+}
+
+static QString vehicleTextFromCode(char c)
+{
+    switch((int)(unsigned char)c)
+    {
+    case 1:
+        return "Sedan";
+    case 2:
+        return "SUV";
+    case 3:
+        return "Truck";
+    case 4:
+        return "Electric";
+    default:
+        return "Other";
+    }
+}
+
+bool IEEE14443ControlWidget::decodeTagInfo(const QByteArray &b1, const QByteArray &b2, TagInfo &info)
+{
+    info.valid = false;
+    if(b1.size() != 16 || b2.size() != 16)
+        return false;
+    if((b1.at(0) != kTagSignature1) || (b1.at(1) != kTagSignature2))
+        return false;
+    info.owner = QString::fromLatin1(b1.constData() + 4, 12).trimmed();
+    info.vehicleType = vehicleTextFromCode(b1.at(3));
+    int bal = 0;
+    bal |= (quint8)b2.at(0);
+    bal |= ((quint8)b2.at(1)) << 8;
+    bal |= ((quint8)b2.at(2)) << 16;
+    bal |= ((quint8)b2.at(3)) << 24;
+    info.balance = bal;
+    info.valid = true;
+    return true;
+}
+
+void IEEE14443ControlWidget::encodeTagInfo(const TagInfo &info, QByteArray &b1, QByteArray &b2)
+{
+    b1 = QByteArray(16, 0x00);
+    b2 = QByteArray(16, 0x00);
+    b1[0] = kTagSignature1;
+    b1[1] = kTagSignature2;
+    b1[2] = 0x01;
+    b1[3] = vehicleCodeFromText(info.vehicleType);
+    QByteArray nameBytes = info.owner.left(12).toLatin1();
+    int i;
+    for(i = 0; i < nameBytes.size() && i < 12; ++i)
+        b1[4 + i] = nameBytes.at(i);
+    b2[0] = (char)(info.balance & 0xFF);
+    b2[1] = (char)((info.balance >> 8) & 0xFF);
+    b2[2] = (char)((info.balance >> 16) & 0xFF);
+    b2[3] = (char)((info.balance >> 24) & 0xFF);
+}
+
+void IEEE14443ControlWidget::updateInfoDisplay(const TagInfo &info)
+{
+    ui->ownerNameEdit->setText(info.owner);
+    int idx = ui->vehicleTypeBox->findText(info.vehicleType);
+    if(idx < 0)
+        idx = ui->vehicleTypeBox->findText("Other");
+    if(idx < 0)
+        idx = 0;
+    ui->vehicleTypeBox->setCurrentIndex(idx);
+    ui->balanceEdit->setText(QString::number(info.balance));
+    currentInfo = info;
+}
+
+IEEE14443ControlWidget::TagInfo IEEE14443ControlWidget::defaultTagInfo() const
+{
+    TagInfo info;
+    info.owner = ui->ownerNameEdit->text();
+    if(info.owner.isEmpty())
+        info.owner = tr("Unknown");
+    info.vehicleType = ui->vehicleTypeBox->currentText();
+    info.balance = ui->rechargeSpin->value();
+    info.valid = true;
+    return info;
+}
+
+void IEEE14443ControlWidget::ensureInitialized()
+{
+    TagInfo info;
+    if(decodeTagInfo(lastBlock1, lastBlock2, info))
+    {
+        updateInfoDisplay(info);
+        handleParkingFlow();
+        return;
+    }
+    info = defaultTagInfo();
+    ui->parkingStatusLabel->setText(tr("Tag initialized"));
+    writeUpdatedInfo(info);
+}
+
+int IEEE14443ControlWidget::calculateFee(const QDateTime &enterTime, const QDateTime &leaveTime) const
+{
+    int secs = (int)enterTime.secsTo(leaveTime);
+    if(secs < 0)
+        secs = 0;
+    int minutes = secs / 60;
+    int hours = (minutes + 59) / 60;
+    return hours * kHourFee;
+}
+
+void IEEE14443ControlWidget::handleParkingFlow()
+{
+    if(currentCardId.isEmpty() || !currentInfo.valid)
+        return;
+    QDateTime now = QDateTime::currentDateTime();
+    if(entryTimeMap.contains(currentCardId))
+    {
+        QDateTime enter = entryTimeMap.value(currentCardId);
+        int fee = calculateFee(enter, now);
+        if(currentInfo.balance < fee)
+        {
+            ui->parkingStatusLabel->setText(tr("Insufficient balance, fee %1").arg(fee));
+            return;
+        }
+        entryTimeMap.remove(currentCardId);
+        currentInfo.balance -= fee;
+        ui->parkingStatusLabel->setText(tr("Stayed %1 min, fee %2").arg(enter.secsTo(now)/60).arg(fee));
+        writeUpdatedInfo(currentInfo);
+    }
+    else
+    {
+        entryTimeMap.insert(currentCardId, now);
+        ui->parkingStatusLabel->setText(tr("Entry time %1").arg(now.toString("hh:mm:ss")));
+    }
+}
+
+void IEEE14443ControlWidget::writeUpdatedInfo(const TagInfo &info)
+{
+    if(!tagAuthenticated)
+    {
+        QMessageBox::warning(this, tr("Warning"), tr("authenticate first"));
+        return;
+    }
+    QByteArray b1;
+    QByteArray b2;
+    encodeTagInfo(info, b1, b2);
+    pendingWriteInfo = info;
+    requestWrite(kUserBlock1, b1);
+    lastBlock1 = b1;
+    lastBlock2 = b2;
 }
 
 // 串口接收数据函数, 通常不需要修改
@@ -167,13 +431,17 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
     QByteArray d = p.data();
     int status = d.at(0);
     d = d.mid(1);
+    waitingReply = false;
     QString resultTipText;
     switch(p.command())
     {
     case IEEE1443Package::SearchCard:
         resultTipText = tr("Search Card ");
         if(status == 0)
+        {
             resultTipText += tr("Succeed");
+            requestAntiColl();
+        }
         else
             resultTipText += tr("Failure");
         break;
@@ -183,7 +451,9 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
         {
             resultTipText += tr("Succeed");
             resultTipText += tr(", Card Id is %1").arg(QString(d.toHex()));
-            ui->selCardIdEdit->setText(d.toHex());
+            currentCardId = d.toHex();
+            ui->selCardIdEdit->setText(currentCardId);
+            requestSelect(d);
         }
         else
             resultTipText += tr("Failure");
@@ -206,6 +476,8 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
                 ui->s70CardBtn->setChecked(true);
                 resetBlockList(1, 255, 4);
             }
+            tagAuthenticated = false;
+            requestAuth(kUserBlock1);
         }
         else
             resultTipText += tr("Failure");
@@ -216,6 +488,9 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
             resultTipText += tr("Succeed");
         else
             resultTipText += tr("Failure");
+        tagAuthenticated = (status == 0);
+        if(tagAuthenticated)
+            requestRead(kUserBlock1);
         break;
     case IEEE1443Package::ReadCard:
         resultTipText = tr("Read Card ");
@@ -225,16 +500,45 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
             // 读卡指令的响应, 可以获得卡内数据
             // 读取正常
             ui->dataEdit->setData(d);
+            if(pendingReadBlock == kUserBlock1)
+            {
+                lastBlock1 = d;
+                requestRead(kUserBlock2);
+            }
+            else if(pendingReadBlock == kUserBlock2)
+            {
+                lastBlock2 = d;
+                pendingReadBlock = -1;
+                ensureInitialized();
+            }
         }
         else
+        {
             resultTipText += tr("Failure");
+            pendingReadBlock = -1;
+        }
         break;
     case IEEE1443Package::WriteCard:
         resultTipText = tr("Write Card ");
         if(status == 0)
+        {
             resultTipText += tr("Succeed");
+            if(pendingWriteBlock == kUserBlock1)
+            {
+                pendingWriteBlock = -1;
+                requestWrite(kUserBlock2, lastBlock2);
+            }
+            else if(pendingWriteBlock == kUserBlock2)
+            {
+                pendingWriteBlock = -1;
+                updateInfoDisplay(pendingWriteInfo);
+            }
+        }
         else
+        {
             resultTipText += tr("Failure");
+            pendingWriteBlock = -1;
+        }
         break;
     }
     ui->resultLabel->setText(resultTipText);
@@ -257,14 +561,32 @@ void IEEE14443ControlWidget::on_clearDisplayBtn_clicked()
     ui->resultLabel->setText("");
 }
 
+void IEEE14443ControlWidget::on_registerBtn_clicked()
+{
+    TagInfo info = defaultTagInfo();
+    writeUpdatedInfo(info);
+    ui->parkingStatusLabel->setText(tr("User registered"));
+}
+
+void IEEE14443ControlWidget::on_rechargeBtn_clicked()
+{
+    TagInfo info = currentInfo.valid ? currentInfo : defaultTagInfo();
+    info.balance += ui->rechargeSpin->value();
+    writeUpdatedInfo(info);
+    ui->parkingStatusLabel->setText(tr("Recharged"));
+}
+
+void IEEE14443ControlWidget::onAutoSearchTimeout()
+{
+    requestSearch();
+}
+
 void IEEE14443ControlWidget::on_searchCardBtn_clicked()
 {
 
 
-        lastSendPackage = IEEE1443Package(0, 0x46, 0x52).toPurePackage();
-        sendData(lastSendPackage);
-        // 如果重新寻卡,则重置卡信息
         resetStatus();
+        requestSearch();
 
 }
 
