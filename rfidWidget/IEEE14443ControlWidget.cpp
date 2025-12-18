@@ -10,10 +10,13 @@
 //#include <ioportManager.h>
 #include<rfidWidget/ioportManager.h>
 
+//块1前两字节签名，用来判断这张卡是不是“停车系统卡”
 static const char kTagSignature1 = 'P';
 static const char kTagSignature2 = 'K';
+//使用块1和块2写入
 static const int kUserBlock1 = 1;
 static const int kUserBlock2 = 2;
+//计费单价
 static const int kHourFee = 5;
 
 IEEE14443ControlWidget::IEEE14443ControlWidget(QWidget *parent) :
@@ -44,6 +47,7 @@ IEEE14443ControlWidget::IEEE14443ControlWidget(QWidget *parent) :
 
     connect(this, SIGNAL(recvPackage(QByteArray)), this, SLOT(onRecvedPackage(QByteArray)));
 //    connect(ui->statusList->verticalScrollBar(), SIGNAL(rangeChanged(int,int)), this, SLOT(onStatusListScrollRangeChanced(int,int)));
+    //自动寻卡定时器，实现自动刷卡
     autoSearchTimer = new QTimer(this);
     autoSearchTimer->setInterval(500);
     connect(autoSearchTimer, SIGNAL(timeout()), this, SLOT(onAutoSearchTimeout()));
@@ -383,7 +387,8 @@ int IEEE14443ControlWidget::calculateFee(const QDateTime &enterTime, const QDate
         secs = 0;
     int minutes = secs / 60;
     int hours = (minutes + 59) / 60;
-    return hours * kHourFee;
+    //return hours * kHourFee;
+    return secs;//测试用
 }
 
 void IEEE14443ControlWidget::handleParkingFlow()
@@ -574,7 +579,6 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
             // 读取正常
             ui->dataEdit->setData(d);
 
-            //停车系统新增
             if(pendingReadBlock == kUserBlock1)
             {
                 lastBlock1 = d;
@@ -662,11 +666,13 @@ void IEEE14443ControlWidget::on_registerBtn_clicked()
 
 void IEEE14443ControlWidget::on_rechargeBtn_clicked()
 {
+    //是否认证
     if(!tagAuthenticated)
     {
         QMessageBox::warning(this, tr("Warning"), tr("authenticate first"));
         return;
     }
+    //是否注册
     if(requiresInitialization || !currentInfo.valid)
     {
         QMessageBox::information(this, tr("Initialization"), tr("Please register the card before recharging."));
