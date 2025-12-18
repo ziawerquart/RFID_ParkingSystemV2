@@ -60,6 +60,10 @@ private:
     TagInfo pendingWriteInfo;
     TagInfo currentInfo;
     QMap<QString, QDateTime> entryTimeMap;
+    QMap<QString, QDateTime> lastEntryTimeMap;
+    QMap<QString, QDateTime> lastExitTimeMap;
+    bool requiresInitialization;
+    bool refreshAfterWrite;
 
 
 private:
@@ -78,6 +82,7 @@ private:
     bool decodeTagInfo(const QByteArray &b1, const QByteArray &b2, TagInfo &info);
     void encodeTagInfo(const TagInfo &info, QByteArray &b1, QByteArray &b2);
     void updateInfoDisplay(const TagInfo &info);
+    void updateInfoPanel(const TagInfo &info, const QDateTime &entryTime, const QDateTime &exitTime);
     TagInfo defaultTagInfo() const;
     void ensureInitialized();
     void handleParkingFlow();

@@ -25,7 +25,9 @@ IEEE14443ControlWidget::IEEE14443ControlWidget(QWidget *parent) :
     waitingReply(false),
     tagAuthenticated(false),
     pendingReadBlock(-1),
-    pendingWriteBlock(-1)
+    pendingWriteBlock(-1),
+    requiresInitialization(false),
+    refreshAfterWrite(false)
 {
     ui->setupUi(this);
     ui->dataEdit->setOverwriteMode(true);
@@ -141,6 +143,12 @@ void IEEE14443ControlWidget::resetStatus()
     pendingWriteBlock = -1;
     currentInfo = TagInfo();
     pendingWriteInfo = TagInfo();
+    requiresInitialization = false;
+    refreshAfterWrite = false;
+    lastEntryTimeMap.clear();
+    lastExitTimeMap.clear();
+    entryTimeMap.clear();
+    updateInfoPanel(TagInfo(), QDateTime(), QDateTime());
 }
 
 void IEEE14443ControlWidget::startAutoSearch()
@@ -302,11 +310,22 @@ void IEEE14443ControlWidget::updateInfoDisplay(const TagInfo &info)
     currentInfo = info;
 }
 
-//从ui中读取待注册车主信息
+void IEEE14443ControlWidget::updateInfoPanel(const TagInfo &info, const QDateTime &entryTime, const QDateTime &exitTime)
+{
+    ui->infoOwnerValue->setText(info.valid ? info.owner : tr("N/A"));
+    ui->infoVehicleValue->setText(info.valid ? info.vehicleType : tr("N/A"));
+    ui->infoEntryTimeValue->setText(entryTime.isValid() ? entryTime.toString("hh:mm:ss") : tr("--"));
+    ui->infoExitTimeValue->setText(exitTime.isValid() ? exitTime.toString("hh:mm:ss") : tr("--"));
+    if(info.valid)
+        ui->infoBalanceValue->setText(QString::number(info.balance));
+    else
+        ui->infoBalanceValue->setText(tr("--"));
+}
+
 IEEE14443ControlWidget::TagInfo IEEE14443ControlWidget::defaultTagInfo() const
 {
     TagInfo info;
-    info.owner = ui->ownerNameEdit->text();//from ui
+    info.owner = ui->ownerNameEdit->text();
     if(info.owner.isEmpty())
         info.owner = tr("Unknown");
     info.vehicleType = ui->vehicleTypeBox->currentText();
@@ -320,13 +339,19 @@ void IEEE14443ControlWidget::ensureInitialized()
     TagInfo info;
     if(decodeTagInfo(lastBlock1, lastBlock2, info))
     {
+        requiresInitialization = false;
         updateInfoDisplay(info);
+        QDateTime entryDisplayTime = entryTimeMap.contains(currentCardId) ? entryTimeMap.value(currentCardId) : lastEntryTimeMap.value(currentCardId);
+        updateInfoPanel(info, entryDisplayTime, lastExitTimeMap.value(currentCardId));
         handleParkingFlow();
         return;
     }
-    info = defaultTagInfo();
-    ui->parkingStatusLabel->setText(tr("Tag initialized"));
-    writeUpdatedInfo(info);
+    if(!requiresInitialization)
+        QMessageBox::information(this, tr("Initialization"), tr("Please fill user info and click Register to initialize the card."));
+    requiresInitialization = true;
+    currentInfo = TagInfo();
+    updateInfoPanel(TagInfo(), QDateTime(), QDateTime());
+    ui->parkingStatusLabel->setText(tr("Card not initialized, please register"));
 }
 
 int IEEE14443ControlWidget::calculateFee(const QDateTime &enterTime, const QDateTime &leaveTime) const
@@ -352,24 +377,32 @@ void IEEE14443ControlWidget::handleParkingFlow()
         if(currentInfo.balance < fee)
         {
             ui->parkingStatusLabel->setText(tr("Insufficient balance, fee %1").arg(fee));
+            updateInfoPanel(currentInfo, enter, QDateTime());
+            QMessageBox::warning(this, tr("Recharge"), tr("Balance is not enough, please recharge before leaving."));
             return;
         }
         entryTimeMap.remove(currentCardId);
+        lastExitTimeMap.insert(currentCardId, now);
+        lastEntryTimeMap.insert(currentCardId, enter);
         currentInfo.balance -= fee;
         ui->parkingStatusLabel->setText(tr("Stayed %1 min, fee %2").arg(enter.secsTo(now)/60).arg(fee));
-        writeUpdatedInfo(currentInfo);//写回余额
+        updateInfoDisplay(currentInfo);
+        updateInfoPanel(currentInfo, QDateTime(), now);
+        refreshAfterWrite = false;
+        writeUpdatedInfo(currentInfo);
     }
-    else//map中没有此卡，执行入场逻辑
+    else
     {
         entryTimeMap.insert(currentCardId, now);
-        //只更新ui状态，不写卡
+        lastEntryTimeMap.insert(currentCardId, now);
         ui->parkingStatusLabel->setText(tr("Entry time %1").arg(now.toString("hh:mm:ss")));
+        updateInfoPanel(currentInfo, now, QDateTime());
     }
 }
-//写入车主信息
+
 void IEEE14443ControlWidget::writeUpdatedInfo(const TagInfo &info)
 {
-    if(!tagAuthenticated)//查询是否认证
+    if(!tagAuthenticated)
     {
         QMessageBox::warning(this, tr("Warning"), tr("authenticate first"));
         return;
@@ -546,12 +579,23 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
             {
                 pendingWriteBlock = -1;
                 updateInfoDisplay(pendingWriteInfo);
+                if(refreshAfterWrite)
+                {
+                    refreshAfterWrite = false;
+                    requestRead(kUserBlock1);
+                }
+                else
+                {
+                    QDateTime entryDisplayTime = entryTimeMap.contains(currentCardId) ? entryTimeMap.value(currentCardId) : lastEntryTimeMap.value(currentCardId);
+                    updateInfoPanel(pendingWriteInfo, entryDisplayTime, lastExitTimeMap.value(currentCardId));
+                }
             }
         }
         else
         {
             resultTipText += tr("Failure");
             pendingWriteBlock = -1;
+            refreshAfterWrite = false;
         }
         break;
     }
@@ -577,18 +621,32 @@ void IEEE14443ControlWidget::on_clearDisplayBtn_clicked()
 
 void IEEE14443ControlWidget::on_registerBtn_clicked()
 {
-    TagInfo info = defaultTagInfo();//从ui读取车主信息，写入info类
-    writeUpdatedInfo(info);//写信息
-    ui->parkingStatusLabel->setText(tr("User registered"));
+    if(!tagAuthenticated)
+    {
+        QMessageBox::warning(this, tr("Warning"), tr("authenticate first"));
+        return;
+    }
+    TagInfo info = defaultTagInfo();
+    refreshAfterWrite = true;
+    writeUpdatedInfo(info);
+    ui->parkingStatusLabel->setText(tr("Registering user info"));
 }
 
-//点击充值按钮后
 void IEEE14443ControlWidget::on_rechargeBtn_clicked()
 {
-    //若解析成功，就以当前余额，不然用默认值
-    TagInfo info = currentInfo.valid ? currentInfo : defaultTagInfo();
-    //余额加上输入框值
+    if(!tagAuthenticated)
+    {
+        QMessageBox::warning(this, tr("Warning"), tr("authenticate first"));
+        return;
+    }
+    if(requiresInitialization || !currentInfo.valid)
+    {
+        QMessageBox::information(this, tr("Initialization"), tr("Please register the card before recharging."));
+        return;
+    }
+    TagInfo info = currentInfo;
     info.balance += ui->rechargeSpin->value();
+    refreshAfterWrite = false;
     writeUpdatedInfo(info);
     ui->parkingStatusLabel->setText(tr("Recharged"));
 }

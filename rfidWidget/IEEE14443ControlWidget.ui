@@ -131,6 +131,85 @@
     </widget>
    </item>
    <item>
+    <widget class="QGroupBox" name="infoDisplayGroupBox">
+     <property name="title">
+      <string>信息显示</string>
+     </property>
+     <layout class="QGridLayout" name="gridLayout_5">
+      <item row="0" column="0">
+       <widget class="QLabel" name="label_infoOwner">
+        <property name="text">
+         <string>车主姓名:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLabel" name="infoOwnerValue">
+        <property name="text">
+         <string>--</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="2">
+       <widget class="QLabel" name="label_infoVehicle">
+        <property name="text">
+         <string>车型:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="3">
+       <widget class="QLabel" name="infoVehicleValue">
+        <property name="text">
+         <string>--</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="label_infoEntry">
+        <property name="text">
+         <string>入场时间:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QLabel" name="infoEntryTimeValue">
+        <property name="text">
+         <string>--</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="2">
+       <widget class="QLabel" name="label_infoExit">
+        <property name="text">
+         <string>出场时间:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="3">
+       <widget class="QLabel" name="infoExitTimeValue">
+        <property name="text">
+         <string>--</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="label_infoBalance">
+        <property name="text">
+         <string>余额:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1" colspan="3">
+       <widget class="QLabel" name="infoBalanceValue">
+        <property name="text">
+         <string>--</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
     <widget class="QGroupBox" name="groupBox">
      <property name="title">
       <string>IEEE1443 Control Page</string>
