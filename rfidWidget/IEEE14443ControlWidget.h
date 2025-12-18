@@ -64,6 +64,7 @@ private:
     QMap<QString, QDateTime> lastExitTimeMap;
     bool requiresInitialization;
     bool refreshAfterWrite;
+    bool registrationPaused;
 
 
 private:
@@ -72,6 +73,8 @@ private:
     void resetStatus();
     void startAutoSearch();
     void stopAutoSearch();
+    void pauseForRegistration();
+    void resumeAfterRegistration();
     void requestSearch();
     void requestAntiColl();
     void requestSelect(const QByteArray &cardId);

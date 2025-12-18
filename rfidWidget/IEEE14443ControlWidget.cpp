@@ -27,7 +27,8 @@ IEEE14443ControlWidget::IEEE14443ControlWidget(QWidget *parent) :
     pendingReadBlock(-1),
     pendingWriteBlock(-1),
     requiresInitialization(false),
-    refreshAfterWrite(false)
+    refreshAfterWrite(false),
+    registrationPaused(false)
 {
     ui->setupUi(this);
     ui->dataEdit->setOverwriteMode(true);
@@ -145,6 +146,7 @@ void IEEE14443ControlWidget::resetStatus()
     pendingWriteInfo = TagInfo();
     requiresInitialization = false;
     refreshAfterWrite = false;
+    registrationPaused = false;
     lastEntryTimeMap.clear();
     lastExitTimeMap.clear();
     entryTimeMap.clear();
@@ -153,6 +155,8 @@ void IEEE14443ControlWidget::resetStatus()
 
 void IEEE14443ControlWidget::startAutoSearch()
 {
+    if(registrationPaused)
+        return;
     if(autoSearchTimer && !autoSearchTimer->isActive())
         autoSearchTimer->start();
 }
@@ -161,6 +165,20 @@ void IEEE14443ControlWidget::stopAutoSearch()
 {
     if(autoSearchTimer)
         autoSearchTimer->stop();
+}
+
+void IEEE14443ControlWidget::pauseForRegistration()
+{
+    registrationPaused = true;
+    stopAutoSearch();
+}
+
+void IEEE14443ControlWidget::resumeAfterRegistration()
+{
+    if(!registrationPaused)
+        return;
+    registrationPaused = false;
+    startAutoSearch();
 }
 
 void IEEE14443ControlWidget::requestSearch()
@@ -340,6 +358,7 @@ void IEEE14443ControlWidget::ensureInitialized()
     if(decodeTagInfo(lastBlock1, lastBlock2, info))
     {
         requiresInitialization = false;
+        resumeAfterRegistration();
         updateInfoDisplay(info);
         QDateTime entryDisplayTime = entryTimeMap.contains(currentCardId) ? entryTimeMap.value(currentCardId) : lastEntryTimeMap.value(currentCardId);
         updateInfoPanel(info, entryDisplayTime, lastExitTimeMap.value(currentCardId));
@@ -351,6 +370,7 @@ void IEEE14443ControlWidget::ensureInitialized()
     entryTimeMap.remove(currentCardId);
     lastEntryTimeMap.remove(currentCardId);
     requiresInitialization = true;
+    pauseForRegistration();
     currentInfo = TagInfo();
     updateInfoPanel(TagInfo(), QDateTime(), QDateTime());
     ui->parkingStatusLabel->setText(tr("Card not initialized, please register"));
@@ -366,7 +386,6 @@ int IEEE14443ControlWidget::calculateFee(const QDateTime &enterTime, const QDate
     return hours * kHourFee;
 }
 
-//刷卡判断出场入场逻辑
 void IEEE14443ControlWidget::handleParkingFlow()
 {
     if(currentCardId.isEmpty() || !currentInfo.valid)
@@ -662,6 +681,8 @@ void IEEE14443ControlWidget::on_rechargeBtn_clicked()
 
 void IEEE14443ControlWidget::onAutoSearchTimeout()
 {
+    if(registrationPaused || requiresInitialization)
+        return;
     requestSearch();
 }
 
