@@ -51,21 +51,23 @@ private:
     QByteArray lastSendPackage;
     int recvStatus;
     QByteArray lastRecvPackage;
-    bool waitingReply;//是否停止等回复，用于防乱序
-    QString currentCardId;//当前识别到的卡ID
-    bool tagAuthenticated;//是否成功认证当前卡
+    bool waitingReply;
+    QString currentCardId;
+    bool tagAuthenticated;
     QByteArray lastBlock1;
     QByteArray lastBlock2;
-    int pendingReadBlock;//待读，等回包
+    int pendingReadBlock;
     int pendingWriteBlock;
-    TagInfo pendingWriteInfo;//暂存要写入的车主信息
-    TagInfo currentInfo;//当前卡解析出的车主信息
+    TagInfo pendingWriteInfo;
+    TagInfo currentInfo;
     QMap<QString, QDateTime> entryTimeMap;
-    QMap<QString, QDateTime> lastEntryTimeMap;//出场时间
+    QMap<QString, QDateTime> lastEntryTimeMap;
     QMap<QString, QDateTime> lastExitTimeMap;
-    bool requiresInitialization;//是否是PK签名格式
-    bool refreshAfterWrite;//写完后是否重新读确认
-    bool registrationPaused;//注册过程中暂停寻卡
+    bool requiresInitialization;
+    bool refreshAfterWrite;
+    bool registrationPaused;
+    bool rechargePaused;
+    int pendingExitFee;
 
 
 private:
@@ -76,22 +78,24 @@ private:
     void stopAutoSearch();
     void pauseForRegistration();
     void resumeAfterRegistration();
-    void requestSearch();//寻卡
-    void requestAntiColl();//防冲突
-    void requestSelect(const QByteArray &cardId);//选卡
-    void requestAuth(quint8 blockNumber);//认证
-    void requestRead(quint8 blockNumber);//读块
-    void requestWrite(quint8 blockNumber, const QByteArray &data);//写块
+    void pauseForRecharge(int feeRequired);
+    void resumeAfterRecharge();
+    void requestSearch();
+    void requestAntiColl();
+    void requestSelect(const QByteArray &cardId);
+    void requestAuth(quint8 blockNumber);
+    void requestRead(quint8 blockNumber);
+    void requestWrite(quint8 blockNumber, const QByteArray &data);
     void handleTagInfo();
-    bool decodeTagInfo(const QByteArray &b1, const QByteArray &b2, TagInfo &info);//业务对象 ↔ 两个16字节块
+    bool decodeTagInfo(const QByteArray &b1, const QByteArray &b2, TagInfo &info);
     void encodeTagInfo(const TagInfo &info, QByteArray &b1, QByteArray &b2);
-    void updateInfoDisplay(const TagInfo &info);//更新界面显示
+    void updateInfoDisplay(const TagInfo &info);
     void updateInfoPanel(const TagInfo &info, const QDateTime &entryTime, const QDateTime &exitTime);
-    TagInfo defaultTagInfo() const;//用于注册
-    void ensureInitialized();//判断是不是停车卡
-    void handleParkingFlow();//进出场判断+扣费
+    TagInfo defaultTagInfo() const;
+    void ensureInitialized();
+    void handleParkingFlow();
     int calculateFee(const QDateTime &enterTime, const QDateTime &leaveTime) const;
-    void writeUpdatedInfo(const TagInfo &info);//写卡写两次
+    void writeUpdatedInfo(const TagInfo &info);
 
 private slots:
     void on_pushButton_clicked();

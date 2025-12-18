@@ -31,7 +31,9 @@ IEEE14443ControlWidget::IEEE14443ControlWidget(QWidget *parent) :
     pendingWriteBlock(-1),
     requiresInitialization(false),
     refreshAfterWrite(false),
-    registrationPaused(false)
+    registrationPaused(false),
+    rechargePaused(false),
+    pendingExitFee(0)
 {
     ui->setupUi(this);
     ui->dataEdit->setOverwriteMode(true);
@@ -151,6 +153,8 @@ void IEEE14443ControlWidget::resetStatus()
     requiresInitialization = false;
     refreshAfterWrite = false;
     registrationPaused = false;
+    rechargePaused = false;
+    pendingExitFee = 0;
     lastEntryTimeMap.clear();
     lastExitTimeMap.clear();
     entryTimeMap.clear();
@@ -159,7 +163,7 @@ void IEEE14443ControlWidget::resetStatus()
 
 void IEEE14443ControlWidget::startAutoSearch()
 {
-    if(registrationPaused)
+    if(registrationPaused || rechargePaused)
         return;
     if(autoSearchTimer && !autoSearchTimer->isActive())
         autoSearchTimer->start();
@@ -182,6 +186,22 @@ void IEEE14443ControlWidget::resumeAfterRegistration()
     if(!registrationPaused)
         return;
     registrationPaused = false;
+    startAutoSearch();
+}
+
+void IEEE14443ControlWidget::pauseForRecharge(int feeRequired)
+{
+    rechargePaused = true;
+    pendingExitFee = feeRequired;
+    stopAutoSearch();
+}
+
+void IEEE14443ControlWidget::resumeAfterRecharge()
+{
+    if(!rechargePaused)
+        return;
+    rechargePaused = false;
+    pendingExitFee = 0;
     startAutoSearch();
 }
 
@@ -411,6 +431,7 @@ void IEEE14443ControlWidget::handleParkingFlow()
         {
             ui->parkingStatusLabel->setText(tr("Insufficient balance, fee %1").arg(fee));
             updateInfoPanel(currentInfo, enter, QDateTime());
+            pauseForRecharge(fee);
             QMessageBox::warning(this, tr("Recharge"), tr("Balance is not enough, please recharge before leaving."));
             return;
         }
@@ -421,6 +442,7 @@ void IEEE14443ControlWidget::handleParkingFlow()
         ui->parkingStatusLabel->setText(tr("Stayed %1 min, fee %2").arg(enter.secsTo(now)/60).arg(fee));
         updateInfoDisplay(currentInfo);
         updateInfoPanel(currentInfo, QDateTime(), now);
+        resumeAfterRecharge();
         refreshAfterWrite = false;
         writeUpdatedInfo(currentInfo);
     }
@@ -428,6 +450,7 @@ void IEEE14443ControlWidget::handleParkingFlow()
     {
         entryTimeMap.insert(currentCardId, now);
         lastEntryTimeMap.insert(currentCardId, now);
+        pendingExitFee = 0;
         ui->parkingStatusLabel->setText(tr("Entry time %1").arg(now.toString("hh:mm:ss")));
         updateInfoPanel(currentInfo, now, QDateTime());
     }
@@ -621,6 +644,19 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
                     QDateTime entryDisplayTime = entryTimeMap.contains(currentCardId) ? entryTimeMap.value(currentCardId) : lastEntryTimeMap.value(currentCardId);
                     updateInfoPanel(pendingWriteInfo, entryDisplayTime, lastExitTimeMap.value(currentCardId));
                 }
+                if(rechargePaused)
+                {
+                    currentInfo = pendingWriteInfo;
+                    if(currentInfo.balance >= pendingExitFee)
+                    {
+                        resumeAfterRecharge();
+                        handleParkingFlow();
+                    }
+                    else
+                    {
+                        QMessageBox::warning(this, tr("Recharge"), tr("Balance is still below required fee %1").arg(pendingExitFee));
+                    }
+                }
             }
         }
         else
@@ -679,7 +715,13 @@ void IEEE14443ControlWidget::on_rechargeBtn_clicked()
         return;
     }
     TagInfo info = currentInfo;
-    info.balance += ui->rechargeSpin->value();
+    int rechargeAmount = ui->rechargeSpin->value();
+    if(rechargePaused && (currentInfo.balance + rechargeAmount < pendingExitFee))
+    {
+        QMessageBox::warning(this, tr("Recharge"), tr("Please recharge at least %1 to cover the pending fee.").arg(pendingExitFee));
+        return;
+    }
+    info.balance += rechargeAmount;
     refreshAfterWrite = false;
     writeUpdatedInfo(info);
     ui->parkingStatusLabel->setText(tr("Recharged"));
@@ -687,7 +729,7 @@ void IEEE14443ControlWidget::on_rechargeBtn_clicked()
 
 void IEEE14443ControlWidget::onAutoSearchTimeout()
 {
-    if(registrationPaused || requiresInitialization)
+    if(registrationPaused || rechargePaused || requiresInitialization)
         return;
     requestSearch();
 }
