@@ -104,6 +104,8 @@ private slots:
     void onPortDataReady();
     void onRecvedPackage(QByteArray pkg);
     void onStatusListScrollRangeChanced(int min, int max);
+
+    //停车系统逻辑
     void on_registerBtn_clicked();
     void on_rechargeBtn_clicked();
     void onAutoSearchTimeout();
