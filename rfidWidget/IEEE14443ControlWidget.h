@@ -4,6 +4,9 @@
 #include <QWidget>
 //#include <qextserialport.h>
 #include "posix_qextserialport.h"
+#include <QMap>
+#include <QDateTime>
+#include <QTimer>
 
 namespace Ui {
     class IEEE14443ControlWidget;
@@ -17,6 +20,15 @@ public:
     explicit IEEE14443ControlWidget(QWidget *parent = 0);
     ~IEEE14443ControlWidget();
     static void showOut();
+
+    struct TagInfo
+    {
+        QString owner;
+        QString vehicleType;
+        int balance;
+        bool valid;
+        TagInfo() : balance(0), valid(false) {}
+    };
 
 protected:
     void showEvent(QShowEvent *);
@@ -33,16 +45,49 @@ private:
     Ui::IEEE14443ControlWidget *ui;
     //QextSerialPort *commPort;
     Posix_QextSerialPort *commPort;
+    QTimer *autoSearchTimer;
     QTimer *readTimer;
     QByteArray lastSendPackage;
     int recvStatus;
     QByteArray lastRecvPackage;
+    bool waitingReply;
+    QString currentCardId;
+    bool tagAuthenticated;
+    QByteArray lastBlock1;
+    QByteArray lastBlock2;
+    int pendingReadBlock;
+    int pendingWriteBlock;
+    TagInfo pendingWriteInfo;
+    TagInfo currentInfo;
+    QMap<QString, QDateTime> entryTimeMap;
+    QMap<QString, QDateTime> lastEntryTimeMap;
+    QMap<QString, QDateTime> lastExitTimeMap;
+    bool requiresInitialization;
+    bool refreshAfterWrite;
 
 
 private:
     bool sendData(const QByteArray &data);
     void resetBlockList(int min, int max, int secSize);
     void resetStatus();
+    void startAutoSearch();
+    void stopAutoSearch();
+    void requestSearch();
+    void requestAntiColl();
+    void requestSelect(const QByteArray &cardId);
+    void requestAuth(quint8 blockNumber);
+    void requestRead(quint8 blockNumber);
+    void requestWrite(quint8 blockNumber, const QByteArray &data);
+    void handleTagInfo();
+    bool decodeTagInfo(const QByteArray &b1, const QByteArray &b2, TagInfo &info);
+    void encodeTagInfo(const TagInfo &info, QByteArray &b1, QByteArray &b2);
+    void updateInfoDisplay(const TagInfo &info);
+    void updateInfoPanel(const TagInfo &info, const QDateTime &entryTime, const QDateTime &exitTime);
+    TagInfo defaultTagInfo() const;
+    void ensureInitialized();
+    void handleParkingFlow();
+    int calculateFee(const QDateTime &enterTime, const QDateTime &leaveTime) const;
+    void writeUpdatedInfo(const TagInfo &info);
 
 private slots:
     void on_pushButton_clicked();
@@ -56,6 +101,9 @@ private slots:
     void onPortDataReady();
     void onRecvedPackage(QByteArray pkg);
     void onStatusListScrollRangeChanced(int min, int max);
+    void on_registerBtn_clicked();
+    void on_rechargeBtn_clicked();
+    void onAutoSearchTimeout();
 };
 
 #endif // IEEE14443CONTROLWIDGET_H
