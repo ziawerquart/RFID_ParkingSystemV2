@@ -21,12 +21,13 @@ public:
     ~IEEE14443ControlWidget();
     static void showOut();
 
+    //停车用户信息结构体
     struct TagInfo
     {
-        QString owner;
-        QString vehicleType;
-        int balance;
-        bool valid;
+        QString owner;//12字节——块1
+        QString vehicleType;//1字节——块1
+        int balance;//4字节——块2
+        bool valid;//由块1开头签名判断是否为“停车系统格式卡”
         TagInfo() : balance(0), valid(false) {}
     };
 
@@ -45,7 +46,7 @@ private:
     Ui::IEEE14443ControlWidget *ui;
     //QextSerialPort *commPort;
     Posix_QextSerialPort *commPort;
-    QTimer *autoSearchTimer;
+    QTimer *autoSearchTimer;//自动寻卡定时器
     QTimer *readTimer;
     QByteArray lastSendPackage;
     int recvStatus;
@@ -108,9 +109,11 @@ private slots:
     void onPortDataReady();
     void onRecvedPackage(QByteArray pkg);
     void onStatusListScrollRangeChanced(int min, int max);
-    void on_registerBtn_clicked();
-    void on_rechargeBtn_clicked();
-    void onAutoSearchTimeout();
+
+    //停车系统逻辑
+    void on_registerBtn_clicked();//注册
+    void on_rechargeBtn_clicked();//充值
+    void onAutoSearchTimeout();//定时寻卡
 };
 
 #endif // IEEE14443CONTROLWIDGET_H
