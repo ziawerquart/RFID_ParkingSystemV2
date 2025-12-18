@@ -101,7 +101,9 @@ bool IEEE14443ControlWidget::sendData(const QByteArray &data)
     {
         //qDebug()<<"send data = "<<data.toHex();
         //qDebug()<<"rawPackage = "<<IEEE1443Package(data).toRawPackage().toHex();
-        commPort->write(IEEE1443Package(data).toRawPackage());
+        QByteArray rawPackage = IEEE1443Package(data).toRawPackage();
+        qDebug() << QString("[EMU] TX %1").arg(QString(rawPackage.toHex()));
+        commPort->write(rawPackage);
         waitingReply = true;
     }
     return true;
@@ -434,6 +436,9 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
 //    w->show();
     IEEE1443Package p(pkg);
     //qDebug()<<"the recieve pkg"<<pkg.toHex();
+    qDebug() << QString("[EMU] RX cmd=0x%1 data=%2")
+                .arg(p.command(), 2, 16, QChar('0'))
+                .arg(QString(p.data().toHex()));
     QByteArray d = p.data();
     int status = d.at(0);
     d = d.mid(1);
