@@ -119,12 +119,12 @@ class S50CardEmu:
             self.authed_blocks.clear()
 
     def handle(self, fr):
-        if not self.active:
-            return None
         addr = fr.addr
         cmd = fr.cmd
+        if not self.active:
+            return build_frame(addr, cmd, bytes([0x01]))
         if cmd == CMD_SEARCH:
-            return build_frame(addr, cmd, bytes([0x00]))
+            return build_frame(addr, cmd, bytes([0x00, 0x04, 0x00]))
         if cmd == CMD_ANTICOLL:
             if len(fr.data) < 1 or fr.data[0] != 0x04:
                 return build_frame(addr, cmd, bytes([0x01]))
@@ -209,10 +209,9 @@ def input_watcher(card, stop_event):
             print("[EMU] 模拟放卡，开始收发数据")
         elif user_in == '1':
             card.set_active(False)
-            print("[EMU] 模拟收卡，结束收发数据")
-            stop_event.set()
+            print("[EMU] 模拟收卡，停止模拟数据")
         else:
-            print("[EMU] 输入0放卡，输入1收卡退出")
+            print("[EMU] 输入0放卡，输入1收卡停止数据")
 
 
 def main():
@@ -227,7 +226,7 @@ def main():
     ser = serial.Serial(args.port, args.baud, timeout=0.2)
     print("[EMU] Opened %s @ %d" % (ser.port, args.baud))
     print("[EMU] UID=%s KeyA=%s" % (card.uid.hex(), card.keya.hex()))
-    print("[EMU] 输入0模拟放卡，输入1模拟收卡退出")
+    print("[EMU] 输入0模拟放卡，输入1模拟收卡停止数据（Ctrl+C退出程序）")
     stop_event = threading.Event()
     watcher = threading.Thread(target=input_watcher, args=(card, stop_event))
     watcher.daemon = True

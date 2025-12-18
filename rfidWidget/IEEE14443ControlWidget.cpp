@@ -348,6 +348,8 @@ void IEEE14443ControlWidget::ensureInitialized()
     }
     if(!requiresInitialization)
         QMessageBox::information(this, tr("Initialization"), tr("Please fill user info and click Register to initialize the card."));
+    entryTimeMap.remove(currentCardId);
+    lastEntryTimeMap.remove(currentCardId);
     requiresInitialization = true;
     currentInfo = TagInfo();
     updateInfoPanel(TagInfo(), QDateTime(), QDateTime());
@@ -369,8 +371,15 @@ void IEEE14443ControlWidget::handleParkingFlow()
 {
     if(currentCardId.isEmpty() || !currentInfo.valid)
         return;
+    if(requiresInitialization)
+    {
+        ui->parkingStatusLabel->setText(tr("Card not initialized, please register"));
+        entryTimeMap.remove(currentCardId);
+        lastEntryTimeMap.remove(currentCardId);
+        return;
+    }
     QDateTime now = QDateTime::currentDateTime();
-    if(entryTimeMap.contains(currentCardId))//若map中已有此卡，执行出场扣钱逻辑
+    if(entryTimeMap.contains(currentCardId))
     {
         QDateTime enter = entryTimeMap.value(currentCardId);
         int fee = calculateFee(enter, now);
