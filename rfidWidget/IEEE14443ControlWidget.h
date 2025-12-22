@@ -60,7 +60,6 @@ private:
     int pendingWriteBlock;
     TagInfo pendingWriteInfo;
     TagInfo currentInfo;
-    QString pendingUserAction;
     QMap<QString, QDateTime> entryTimeMap;
     QMap<QString, QDateTime> lastEntryTimeMap;
     QMap<QString, QDateTime> lastExitTimeMap;
@@ -81,9 +80,6 @@ private:
     void resumeAfterRegistration();
     void pauseForRecharge(int feeRequired);
     void resumeAfterRecharge();
-    void showHoldCardNotice(const QString &actionText);
-    TagInfo collectRegistrationInfo(bool &accepted);
-    int collectRechargeAmount(bool &accepted);
     void requestSearch();
     void requestAntiColl();
     void requestSelect(const QByteArray &cardId);
