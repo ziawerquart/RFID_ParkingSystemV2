@@ -200,7 +200,7 @@ QString IEEE14443ControlWidget::commandName(quint8 cmd) const
     case IEEE1443Package::SearchCard:
         return tr("SearchCard");
     case IEEE1443Package::AntiColl:
-        return tr("AntiColl");
+        return tr("AntiColl/GetID");
     case IEEE1443Package::SelectCard:
         return tr("SelectCard");
     case IEEE1443Package::Authentication:
@@ -209,8 +209,6 @@ QString IEEE14443ControlWidget::commandName(quint8 cmd) const
         return tr("Read");
     case IEEE1443Package::WriteCard:
         return tr("Write");
-    case 0x47:
-        return tr("GetID");
     default:
         return tr("Cmd 0x%1").arg(cmd, 2, 16, QChar('0'));
     }
