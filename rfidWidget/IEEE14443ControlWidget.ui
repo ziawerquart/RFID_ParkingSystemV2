@@ -17,7 +17,7 @@
    <item>
     <widget class="QGroupBox" name="tagInfoGroupBox">
      <property name="title">
-      <string>Tag User Info</string>
+      <string>用户操作</string>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_2">
       <item>
@@ -25,7 +25,7 @@
         <item row="0" column="0">
          <widget class="QLabel" name="label_owner">
           <property name="text">
-           <string>Owner:</string>
+           <string>用户名:</string>
           </property>
          </widget>
         </item>
@@ -39,7 +39,7 @@
         <item row="0" column="2">
          <widget class="QLabel" name="label_vehicle">
           <property name="text">
-           <string>Vehicle Type:</string>
+           <string>车型:</string>
           </property>
          </widget>
         </item>
@@ -75,7 +75,7 @@
         <item row="1" column="0">
          <widget class="QLabel" name="label_balance">
           <property name="text">
-           <string>Balance:</string>
+           <string>余额:</string>
           </property>
          </widget>
         </item>
@@ -89,7 +89,7 @@
         <item row="1" column="2">
          <widget class="QLabel" name="label_recharge">
           <property name="text">
-           <string>Recharge Amount:</string>
+           <string>充值金额:</string>
           </property>
          </widget>
         </item>
@@ -107,14 +107,14 @@
         <item>
          <widget class="QPushButton" name="registerBtn">
           <property name="text">
-           <string>Register/Init</string>
+           <string>注册</string>
           </property>
          </widget>
         </item>
         <item>
          <widget class="QPushButton" name="rechargeBtn">
           <property name="text">
-           <string>Recharge</string>
+           <string>充值</string>
           </property>
          </widget>
         </item>
@@ -211,6 +211,9 @@
    </item>
    <item>
     <widget class="QGroupBox" name="groupBox">
+     <property name="visible">
+      <bool>false</bool>
+     </property>
      <property name="title">
       <string>IEEE1443 Control Page</string>
      </property>
@@ -448,6 +451,9 @@
         </item>
         <item>
          <widget class="QPushButton" name="pushButton">
+          <property name="visible">
+           <bool>false</bool>
+          </property>
           <property name="text">
            <string>BegainSearch</string>
           </property>

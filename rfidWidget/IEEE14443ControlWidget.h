@@ -60,6 +60,7 @@ private:
     int pendingWriteBlock;
     TagInfo pendingWriteInfo;
     TagInfo currentInfo;
+    QString pendingUserAction;
     QMap<QString, QDateTime> entryTimeMap;
     QMap<QString, QDateTime> lastEntryTimeMap;
     QMap<QString, QDateTime> lastExitTimeMap;
@@ -76,10 +77,15 @@ private:
     void resetStatus();
     void startAutoSearch();
     void stopAutoSearch();
+    QString commandName(quint8 cmd) const;
+    void logPackage(const QString &direction, const QByteArray &pkg) const;
     void pauseForRegistration();
     void resumeAfterRegistration();
     void pauseForRecharge(int feeRequired);
     void resumeAfterRecharge();
+    void showHoldCardNotice(const QString &actionText);
+    TagInfo collectRegistrationInfo(bool &accepted);
+    int collectRechargeAmount(bool &accepted);
     void requestSearch();
     void requestAntiColl();
     void requestSelect(const QByteArray &cardId);
