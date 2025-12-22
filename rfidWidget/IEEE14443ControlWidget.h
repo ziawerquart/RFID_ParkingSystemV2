@@ -46,17 +46,17 @@ private:
     Ui::IEEE14443ControlWidget *ui;
     //QextSerialPort *commPort;
     Posix_QextSerialPort *commPort;
-    QTimer *autoSearchTimer;//自动寻卡定时器
+    QTimer *autoSearchTimer;//自动寻卡-定时器
     QTimer *readTimer;
     QByteArray lastSendPackage;
     int recvStatus;
     QByteArray lastRecvPackage;
-    bool waitingReply;
-    QString currentCardId;
-    bool tagAuthenticated;
-    QByteArray lastBlock1;
+    bool waitingReply;//自动寻卡——是否等回复
+    QString currentCardId;//自动寻卡——当前识别到的ID
+    bool tagAuthenticated;//自动寻卡——是否认证成功
+    QByteArray lastBlock1;//缓存块1、2数据
     QByteArray lastBlock2;
-    int pendingReadBlock;
+    int pendingReadBlock;//自动寻卡——指示当前等回包的所哪个块的读操作
     int pendingWriteBlock;
     TagInfo pendingWriteInfo;
     TagInfo currentInfo;
@@ -109,8 +109,6 @@ private slots:
     void onPortDataReady();
     void onRecvedPackage(QByteArray pkg);
     void onStatusListScrollRangeChanced(int min, int max);
-
-    //停车系统逻辑
     void on_registerBtn_clicked();//注册
     void on_rechargeBtn_clicked();//充值
     void onAutoSearchTimeout();//定时寻卡

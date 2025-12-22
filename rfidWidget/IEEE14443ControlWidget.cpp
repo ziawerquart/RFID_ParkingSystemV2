@@ -47,11 +47,14 @@ IEEE14443ControlWidget::IEEE14443ControlWidget(QWidget *parent) :
     ui->authKeyEdit->setBytesperLine(6);
     ui->authKeyEdit->setData(defAuthKey);
 
+    //收到包信号和处理包信息号
     connect(this, SIGNAL(recvPackage(QByteArray)), this, SLOT(onRecvedPackage(QByteArray)));
-//    connect(ui->statusList->verticalScrollBar(), SIGNAL(rangeChanged(int,int)), this, SLOT(onStatusListScrollRangeChanced(int,int)));
-    //自动寻卡定时器，实现自动刷卡
+//  connect(ui->statusList->verticalScrollBar(), SIGNAL(rangeChanged(int,int)), this, SLOT(onStatusListScrollRangeChanced(int,int)));
+
+    //设置自动寻卡定时器，实现自动刷卡
     autoSearchTimer = new QTimer(this);
     autoSearchTimer->setInterval(500);
+    //连接信号到槽函数
     connect(autoSearchTimer, SIGNAL(timeout()), this, SLOT(onAutoSearchTimeout()));
     resetStatus();
 }
@@ -61,8 +64,10 @@ IEEE14443ControlWidget::~IEEE14443ControlWidget()
     delete ui;
 }
 
+//开始逻辑
 bool IEEE14443ControlWidget::start(const QString &port)
 {
+    //设置串口参数
     if(commPort != NULL)
         return false;
     //commPort = new QextSerialPort(port,  QextSerialPort::EventDriven);
@@ -74,10 +79,13 @@ bool IEEE14443ControlWidget::start(const QString &port)
     commPort->setStopBits(STOP_1);
 
     if (commPort->open(QIODevice::ReadWrite) == true) {
+        //设置读取计时器——用于读取包
         //connect(commPort, SIGNAL(readyRead()), this, SLOT(onPortDataReady()));
-        readTimer = new QTimer(this);   //设置读取计时器
+        readTimer = new QTimer(this);   //初始化计时器
         readTimer->start(100);  //设置延时为100ms
         connect(readTimer,SIGNAL(timeout()),this,SLOT(onPortDataReady()));
+
+        //新增——开始自动读取
         startAutoSearch();
         return true;
     }
@@ -100,7 +108,7 @@ bool IEEE14443ControlWidget::stop()
     stopAutoSearch();
     return true;
 }
-
+//发数据
 bool IEEE14443ControlWidget::sendData(const QByteArray &data)
 {
 //    IEEE1443PackageWidget *w = new IEEE1443PackageWidget(tr("Send"), data, this);
@@ -111,7 +119,7 @@ bool IEEE14443ControlWidget::sendData(const QByteArray &data)
         //qDebug()<<"send data = "<<data.toHex();
         //qDebug()<<"rawPackage = "<<IEEE1443Package(data).toRawPackage().toHex();
         QByteArray rawPackage = IEEE1443Package(data).toRawPackage();
-        qDebug() << QString("[EMU] TX %1").arg(QString(rawPackage.toHex()));
+        qDebug() << QString("send %1").arg(QString(rawPackage.toHex()));
         commPort->write(rawPackage);
         waitingReply = true;
     }
@@ -161,26 +169,30 @@ void IEEE14443ControlWidget::resetStatus()
     updateInfoPanel(TagInfo(), QDateTime(), QDateTime());
 }
 
+//自动寻卡控制========================================================
+//开始自动寻卡
 void IEEE14443ControlWidget::startAutoSearch()
 {
-    if(registrationPaused || rechargePaused)
+    //检查是否需要暂停自动寻卡
+    if(registrationPaused || rechargePaused)//当因注册或收费需要暂停时，不自动寻卡
         return;
+    // 检查定时器是否有效且未激活
     if(autoSearchTimer && !autoSearchTimer->isActive())
-        autoSearchTimer->start();
+        autoSearchTimer->start();//启动定时器
 }
-
+//停止自动寻卡
 void IEEE14443ControlWidget::stopAutoSearch()
 {
     if(autoSearchTimer)
         autoSearchTimer->stop();
 }
-
+//用户注册时暂停寻卡
 void IEEE14443ControlWidget::pauseForRegistration()
 {
     registrationPaused = true;
     stopAutoSearch();
 }
-
+//用户注册结束继续寻卡
 void IEEE14443ControlWidget::resumeAfterRegistration()
 {
     if(!registrationPaused)
@@ -188,14 +200,14 @@ void IEEE14443ControlWidget::resumeAfterRegistration()
     registrationPaused = false;
     startAutoSearch();
 }
-
+//用户充值时暂停寻卡
 void IEEE14443ControlWidget::pauseForRecharge(int feeRequired)
 {
     rechargePaused = true;
     pendingExitFee = feeRequired;
     stopAutoSearch();
 }
-
+//用户充值结束继续寻卡
 void IEEE14443ControlWidget::resumeAfterRecharge()
 {
     if(!rechargePaused)
@@ -205,6 +217,8 @@ void IEEE14443ControlWidget::resumeAfterRecharge()
     startAutoSearch();
 }
 
+//发不同种类的包给卡片==================================================
+//请求寻卡
 void IEEE14443ControlWidget::requestSearch()
 {
     if(waitingReply)
@@ -212,7 +226,7 @@ void IEEE14443ControlWidget::requestSearch()
     lastSendPackage = IEEE1443Package(0, IEEE1443Package::SearchCard, 0x52).toPurePackage();
     sendData(lastSendPackage);
 }
-
+//请求防冲突
 void IEEE14443ControlWidget::requestAntiColl()
 {
     if(waitingReply)
@@ -220,7 +234,7 @@ void IEEE14443ControlWidget::requestAntiColl()
     lastSendPackage = IEEE1443Package(0, IEEE1443Package::AntiColl, 0x04).toPurePackage();
     sendData(lastSendPackage);
 }
-
+//请求选卡
 void IEEE14443ControlWidget::requestSelect(const QByteArray &cardId)
 {
     if(waitingReply)
@@ -229,7 +243,7 @@ void IEEE14443ControlWidget::requestSelect(const QByteArray &cardId)
     lastSendPackage = pkg.toPurePackage();
     sendData(lastSendPackage);
 }
-
+//请求认证
 void IEEE14443ControlWidget::requestAuth(quint8 blockNumber)
 {
     QByteArray authInfo;
@@ -245,7 +259,7 @@ void IEEE14443ControlWidget::requestAuth(quint8 blockNumber)
     lastSendPackage = pkg.toPurePackage();
     sendData(lastSendPackage);
 }
-
+//请求读卡
 void IEEE14443ControlWidget::requestRead(quint8 blockNumber)
 {
     pendingReadBlock = blockNumber;
@@ -253,8 +267,7 @@ void IEEE14443ControlWidget::requestRead(quint8 blockNumber)
     lastSendPackage = pkg.toPurePackage();
     sendData(lastSendPackage);
 }
-
-//写函数
+//请求写卡
 void IEEE14443ControlWidget::requestWrite(quint8 blockNumber, const QByteArray &data)
 {
     if(data.size() != 16)
@@ -271,6 +284,7 @@ void IEEE14443ControlWidget::requestWrite(quint8 blockNumber, const QByteArray &
     sendData(lastSendPackage);
 }
 
+//车辆信息<->数字
 static char vehicleCodeFromText(const QString &text)
 {
     if(text == "Sedan")
@@ -283,7 +297,6 @@ static char vehicleCodeFromText(const QString &text)
         return 4;
     return 0;
 }
-
 static QString vehicleTextFromCode(char c)
 {
     switch((int)(unsigned char)c)
@@ -300,7 +313,7 @@ static QString vehicleTextFromCode(char c)
         return "Other";
     }
 }
-
+//info<->16Byte
 bool IEEE14443ControlWidget::decodeTagInfo(const QByteArray &b1, const QByteArray &b2, TagInfo &info)
 {
     info.valid = false;
@@ -319,8 +332,6 @@ bool IEEE14443ControlWidget::decodeTagInfo(const QByteArray &b1, const QByteArra
     info.valid = true;
     return true;
 }
-
-//turn tageinfo object to 2 16byte block
 void IEEE14443ControlWidget::encodeTagInfo(const TagInfo &info, QByteArray &b1, QByteArray &b2)
 {
     b1 = QByteArray(16, 0x00);
@@ -338,7 +349,7 @@ void IEEE14443ControlWidget::encodeTagInfo(const TagInfo &info, QByteArray &b1, 
     b2[2] = (char)((info.balance >> 16) & 0xFF);
     b2[3] = (char)((info.balance >> 24) & 0xFF);
 }
-
+//更新信息展示区:车主信息
 void IEEE14443ControlWidget::updateInfoDisplay(const TagInfo &info)
 {
     ui->ownerNameEdit->setText(info.owner);
@@ -351,7 +362,7 @@ void IEEE14443ControlWidget::updateInfoDisplay(const TagInfo &info)
     ui->balanceEdit->setText(QString::number(info.balance));
     currentInfo = info;
 }
-
+//更新信息展示区:进出场时间
 void IEEE14443ControlWidget::updateInfoPanel(const TagInfo &info, const QDateTime &entryTime, const QDateTime &exitTime)
 {
     ui->infoOwnerValue->setText(info.valid ? info.owner : tr("N/A"));
@@ -363,7 +374,7 @@ void IEEE14443ControlWidget::updateInfoPanel(const TagInfo &info, const QDateTim
     else
         ui->infoBalanceValue->setText(tr("--"));
 }
-
+//生成待写入info
 IEEE14443ControlWidget::TagInfo IEEE14443ControlWidget::defaultTagInfo() const
 {
     TagInfo info;
@@ -375,31 +386,42 @@ IEEE14443ControlWidget::TagInfo IEEE14443ControlWidget::defaultTagInfo() const
     info.valid = true;
     return info;
 }
-
+//检测是否初始化
 void IEEE14443ControlWidget::ensureInitialized()
 {
+    //尝试解析
     TagInfo info;
-    if(decodeTagInfo(lastBlock1, lastBlock2, info))
+    if(decodeTagInfo(lastBlock1, lastBlock2, info))//若解析成功
     {
+        //不需要初始化
         requiresInitialization = false;
-        resumeAfterRegistration();
+        resumeAfterRegistration();//继续自动寻卡
+
+        //更新展示信息
         updateInfoDisplay(info);
-        QDateTime entryDisplayTime = entryTimeMap.contains(currentCardId) ? entryTimeMap.value(currentCardId) : lastEntryTimeMap.value(currentCardId);
+        QDateTime entryDisplayTime = entryTimeMap.contains(currentCardId) ?
+                                     entryTimeMap.value(currentCardId) :
+                                     lastEntryTimeMap.value(currentCardId);
         updateInfoPanel(info, entryDisplayTime, lastExitTimeMap.value(currentCardId));
+        //进行出入场逻辑
         handleParkingFlow();
         return;
     }
+    //只在第一次进入未初始化状态时提示要初始化
     if(!requiresInitialization)
         QMessageBox::information(this, tr("Initialization"), tr("Please fill user info and click Register to initialize the card."));
+    //清理停车状态
     entryTimeMap.remove(currentCardId);
     lastEntryTimeMap.remove(currentCardId);
+    //暂停
     requiresInitialization = true;
     pauseForRegistration();
+    //清空面板
     currentInfo = TagInfo();
     updateInfoPanel(TagInfo(), QDateTime(), QDateTime());
     ui->parkingStatusLabel->setText(tr("Card not initialized, please register"));
 }
-
+//计算停车费用
 int IEEE14443ControlWidget::calculateFee(const QDateTime &enterTime, const QDateTime &leaveTime) const
 {
     int secs = (int)enterTime.secsTo(leaveTime);
@@ -410,11 +432,13 @@ int IEEE14443ControlWidget::calculateFee(const QDateTime &enterTime, const QDate
     //return hours * kHourFee;
     return secs;//测试用
 }
-
+//判断进出场
 void IEEE14443ControlWidget::handleParkingFlow()
 {
+    //检查当前卡信息
     if(currentCardId.isEmpty() || !currentInfo.valid)
         return;
+    //判断是否初始化
     if(requiresInitialization)
     {
         ui->parkingStatusLabel->setText(tr("Card not initialized, please register"));
@@ -422,31 +446,49 @@ void IEEE14443ControlWidget::handleParkingFlow()
         lastEntryTimeMap.remove(currentCardId);
         return;
     }
+    //记录当前时间
     QDateTime now = QDateTime::currentDateTime();
+    //若entryTimeMap包括当前卡号——出场
     if(entryTimeMap.contains(currentCardId))
     {
+        //获取入场时间
         QDateTime enter = entryTimeMap.value(currentCardId);
+        //算钱
         int fee = calculateFee(enter, now);
+        //钱不够，提醒
         if(currentInfo.balance < fee)
         {
+            //ui提醒
             ui->parkingStatusLabel->setText(tr("Insufficient balance, fee %1").arg(fee));
             updateInfoPanel(currentInfo, enter, QDateTime());
+            //暂停自动寻卡
             pauseForRecharge(fee);
             QMessageBox::warning(this, tr("Recharge"), tr("Balance is not enough, please recharge before leaving."));
             return;
         }
+
+        //移除入场时间信息
         entryTimeMap.remove(currentCardId);
+        //更新最近出场信息
         lastExitTimeMap.insert(currentCardId, now);
+        //更新最近入场信息
         lastEntryTimeMap.insert(currentCardId, enter);
+        //扣费
         currentInfo.balance -= fee;
         ui->parkingStatusLabel->setText(tr("Stayed %1 min, fee %2").arg(enter.secsTo(now)/60).arg(fee));
         updateInfoDisplay(currentInfo);
         updateInfoPanel(currentInfo, QDateTime(), now);
+
+        //继续自动寻卡
         resumeAfterRecharge();
+
+        //不需要读回
         refreshAfterWrite = false;
+
+        //写入当前信息
         writeUpdatedInfo(currentInfo);
     }
-    else
+    else//入场
     {
         entryTimeMap.insert(currentCardId, now);
         lastEntryTimeMap.insert(currentCardId, now);
@@ -455,20 +497,25 @@ void IEEE14443ControlWidget::handleParkingFlow()
         updateInfoPanel(currentInfo, now, QDateTime());
     }
 }
-
+//把占两个块的车主信息写进卡里
 void IEEE14443ControlWidget::writeUpdatedInfo(const TagInfo &info)
 {
+    //检查是否认证
     if(!tagAuthenticated)
     {
         QMessageBox::warning(this, tr("Warning"), tr("authenticate first"));
         return;
     }
+    //把车主信息编写成块
     QByteArray b1;
     QByteArray b2;
-    encodeTagInfo(info, b1, b2);//把车主信息编写成两个块
+    encodeTagInfo(info, b1, b2);
+    //生成待写入信息
     pendingWriteInfo = info;
-    requestWrite(kUserBlock1, b1);//块号，data//写入块1
+    //写入b1
+    requestWrite(kUserBlock1, b1);
 
+    //保存待写入info的副本
     lastBlock1 = b1;
     lastBlock2 = b2;
 }
@@ -525,7 +572,7 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
 //    w->show();
     IEEE1443Package p(pkg);
     //qDebug()<<"the recieve pkg"<<pkg.toHex();
-    qDebug() << QString("[EMU] RX cmd=0x%1 data=%2")
+    qDebug() << QString("recieve cmd=0x%1 data=%2")
                 .arg(p.command(), 2, 16, QChar('0'))
                 .arg(QString(p.data().toHex()));
     QByteArray d = p.data();
@@ -602,15 +649,16 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
             // 读取正常
             ui->dataEdit->setData(d);
 
-            if(pendingReadBlock == kUserBlock1)
+            if(pendingReadBlock == kUserBlock1)//待读块1
             {
                 lastBlock1 = d;
                 requestRead(kUserBlock2);//读完块1，自动读块2
             }
-            else if(pendingReadBlock == kUserBlock2)
+            else if(pendingReadBlock == kUserBlock2)//待读块2
             {
                 lastBlock2 = d;
                 pendingReadBlock = -1;
+                //确认初始化
                 ensureInitialized();
             }
         }
@@ -622,41 +670,46 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
         break;
     case IEEE1443Package::WriteCard:
         resultTipText = tr("Write Card ");
-        if(status == 0)
+        if(status == 0)//写成功
         {
             resultTipText += tr("Succeed");
-            if(pendingWriteBlock == kUserBlock1)
+            if(pendingWriteBlock == kUserBlock1)//如果待写入b2
             {
                 pendingWriteBlock = -1;
-                requestWrite(kUserBlock2, lastBlock2);
+                requestWrite(kUserBlock2, lastBlock2);//继续写b2
             }
-            else if(pendingWriteBlock == kUserBlock2)
+            else if(pendingWriteBlock == kUserBlock2)//如果b2已写入
             {
                 pendingWriteBlock = -1;
-                updateInfoDisplay(pendingWriteInfo);
-                if(refreshAfterWrite)
+                updateInfoDisplay(pendingWriteInfo);//更新显示
+                if(refreshAfterWrite)//写完后是否刷新——用于注册后显示车主信息
                 {
                     refreshAfterWrite = false;
-                    requestRead(kUserBlock1);
+                    requestRead(kUserBlock1);//马上读块1
                 }
-                else
+                else//写完后不用刷新，直接更新展示信息——用于充值/扣费逻辑
                 {
-                    QDateTime entryDisplayTime = entryTimeMap.contains(currentCardId) ? entryTimeMap.value(currentCardId) : lastEntryTimeMap.value(currentCardId);
+                    QDateTime entryDisplayTime =
+                            entryTimeMap.contains(currentCardId) ?//仍然在场？
+                            entryTimeMap.value(currentCardId) ://当前入场时间
+                            lastEntryTimeMap.value(currentCardId);//最近入场时间
                     updateInfoPanel(pendingWriteInfo, entryDisplayTime, lastExitTimeMap.value(currentCardId));
                 }
+
                 if(rechargePaused)
                 {
-                    currentInfo = pendingWriteInfo;
-                    if(currentInfo.balance >= pendingExitFee)
+                    currentInfo = pendingWriteInfo;//同步到系统当前信息
+                    if(currentInfo.balance >= pendingExitFee)//钱够，放行
                     {
-                        resumeAfterRecharge();
-                        handleParkingFlow();
+                        resumeAfterRecharge();//继续寻卡
+                        handleParkingFlow();//继续放行
                     }
-                    else
+                    else//出场时钱不够，待充值，保持rechargePaused状态，待充值
                     {
                         QMessageBox::warning(this, tr("Recharge"), tr("Balance is still below required fee %1").arg(pendingExitFee));
                     }
                 }
+
             }
         }
         else
@@ -686,20 +739,23 @@ void IEEE14443ControlWidget::on_clearDisplayBtn_clicked()
 //    }
     ui->resultLabel->setText("");
 }
-
+//注册按钮
 void IEEE14443ControlWidget::on_registerBtn_clicked()
 {
+    //检查认证
     if(!tagAuthenticated)
     {
         QMessageBox::warning(this, tr("Warning"), tr("authenticate first"));
         return;
     }
+    //生成待写入信息
     TagInfo info = defaultTagInfo();
     refreshAfterWrite = true;
+    //向卡写信息
     writeUpdatedInfo(info);
     ui->parkingStatusLabel->setText(tr("Registering user info"));
 }
-
+//充值按钮
 void IEEE14443ControlWidget::on_rechargeBtn_clicked()
 {
     //是否认证
@@ -714,26 +770,35 @@ void IEEE14443ControlWidget::on_rechargeBtn_clicked()
         QMessageBox::information(this, tr("Initialization"), tr("Please register the card before recharging."));
         return;
     }
+
+    //读取余额和输入金额
     TagInfo info = currentInfo;
     int rechargeAmount = ui->rechargeSpin->value();
+
+    //若钱不够，导致处于“待充值出场”状态，强制至少充值到覆盖 pendingExitFee
     if(rechargePaused && (currentInfo.balance + rechargeAmount < pendingExitFee))
     {
         QMessageBox::warning(this, tr("Recharge"), tr("Please recharge at least %1 to cover the pending fee.").arg(pendingExitFee));
         return;
     }
+
+    //计算充值后的新余额
     info.balance += rechargeAmount;
+    //写新余额
     refreshAfterWrite = false;
     writeUpdatedInfo(info);
     ui->parkingStatusLabel->setText(tr("Recharged"));
 }
 
+//处理timeout信号
 void IEEE14443ControlWidget::onAutoSearchTimeout()
 {
     if(registrationPaused || rechargePaused || requiresInitialization)
         return;
-    requestSearch();
+    requestSearch();//每过一小段时间，就请求寻卡
 }
 
+//寻卡按钮
 void IEEE14443ControlWidget::on_searchCardBtn_clicked()
 {
 
@@ -742,13 +807,13 @@ void IEEE14443ControlWidget::on_searchCardBtn_clicked()
         requestSearch();
 
 }
-
+//getID按钮
 void IEEE14443ControlWidget::on_getIdBtn_clicked()
 {
     lastSendPackage = IEEE1443Package(0, 0x47, 0x04).toPurePackage();
     sendData(lastSendPackage);
 }
-
+//selectID按钮
 void IEEE14443ControlWidget::on_selCardBtn_clicked()
 {
     if(ui->selCardIdEdit->text().length() != 8)
@@ -761,7 +826,7 @@ void IEEE14443ControlWidget::on_selCardBtn_clicked()
     lastSendPackage = pkg.toPurePackage();
     sendData(lastSendPackage);
 }
-
+//认证按钮
 void IEEE14443ControlWidget::on_authCheckBtn_clicked()
 {
     if(ui->selCardIdEdit->text().length() != 8)
@@ -787,14 +852,14 @@ void IEEE14443ControlWidget::on_authCheckBtn_clicked()
     lastSendPackage = pkg.toPurePackage();
     sendData(lastSendPackage);
 }
-
+//读按钮
 void IEEE14443ControlWidget::on_readBtn_clicked()
 {
     IEEE1443Package pkg(0, 0x4B, (char)ui->blockNumberBox->currentText().toLong());
     lastSendPackage = pkg.toPurePackage();
     sendData(lastSendPackage);
 }
-
+//写按钮
 void IEEE14443ControlWidget::on_writeBtn_clicked()
 {
     QByteArray writeInfo;
@@ -825,7 +890,6 @@ void IEEE14443ControlWidget::on_pushButton_clicked()
         ui->pushButton->setText(tr("BegainSearch"));
     }
 }
-
 void IEEE14443ControlWidget::showEvent(QShowEvent *)
 {
     if(ui->pushButton->text() == tr("BegainSearch"))
@@ -836,7 +900,6 @@ void IEEE14443ControlWidget::showEvent(QShowEvent *)
         ui->pushButton->setText(tr("Stop"));
     }
 }
-
 void IEEE14443ControlWidget::hideEvent(QHideEvent *)
 {
     if(ui->pushButton->text() != tr("BegainSearch"))
