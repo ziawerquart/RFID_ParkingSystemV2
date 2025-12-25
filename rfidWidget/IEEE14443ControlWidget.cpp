@@ -34,6 +34,8 @@ IEEE14443ControlWidget::IEEE14443ControlWidget(QWidget *parent) :
     registrationPaused(false),
     registrationFlowActive(false),
     registrationVerificationPending(false),
+    registrationWritePending(false),
+    registrationPendingStatusText(),
     rechargePaused(false),
     pendingExitFee(0)
 {
@@ -165,6 +167,8 @@ void IEEE14443ControlWidget::resetStatus()
     registrationPaused = false;
     registrationFlowActive = false;
     registrationVerificationPending = false;
+    registrationWritePending = false;
+    registrationPendingStatusText.clear();
     rechargePaused = false;
     pendingExitFee = 0;
     lastEntryTimeMap.clear();
@@ -250,6 +254,8 @@ void IEEE14443ControlWidget::requestSelect(const QByteArray &cardId)
 //请求认证
 void IEEE14443ControlWidget::requestAuth(quint8 blockNumber)
 {
+    if(waitingReply)
+        return;
     QByteArray authInfo;
     authInfo.append(0x60);
     authInfo.append((char)blockNumber);
@@ -266,6 +272,8 @@ void IEEE14443ControlWidget::requestAuth(quint8 blockNumber)
 //请求读卡
 void IEEE14443ControlWidget::requestRead(quint8 blockNumber)
 {
+    if(waitingReply)
+        return;
     pendingReadBlock = blockNumber;
     IEEE1443Package pkg(0, 0x4B, (char)blockNumber);
     lastSendPackage = pkg.toPurePackage();
@@ -274,6 +282,8 @@ void IEEE14443ControlWidget::requestRead(quint8 blockNumber)
 //请求写卡
 void IEEE14443ControlWidget::requestWrite(quint8 blockNumber, const QByteArray &data)
 {
+    if(waitingReply)
+        return;
     if(data.size() != 16)
     {
         QMessageBox::warning(this, tr("Warning"), tr("write data error"));
@@ -510,6 +520,14 @@ void IEEE14443ControlWidget::startRegistrationFlow()
         ui->parkingStatusLabel->setText(tr("注册已取消"));
         return;
     }
+    if(waitingReply)
+    {
+        registrationWritePending = true;
+        registrationPendingInfo = info;
+        registrationPendingStatusText = tr("正在注册...");
+        ui->parkingStatusLabel->setText(tr("等待当前操作完成..."));
+        return;
+    }
     registrationVerificationPending = true;
     refreshAfterWrite = true;
     writeUpdatedInfo(info);
@@ -672,6 +690,12 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
                 .arg(p.command(), 2, 16, QChar('0'))
                 .arg(QString(p.data().toHex()));
     QByteArray d = p.data();
+    if(d.isEmpty())
+    {
+        qDebug() << "empty payload for cmd" << p.command();
+        waitingReply = false;
+        return;
+    }
     int status = d.at(0);
     d = d.mid(1);
     waitingReply = false;
@@ -816,6 +840,15 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
         }
         break;
     }
+
+    if(registrationWritePending && !waitingReply)
+    {
+        registrationWritePending = false;
+        registrationVerificationPending = true;
+        refreshAfterWrite = true;
+        writeUpdatedInfo(registrationPendingInfo);
+        ui->parkingStatusLabel->setText(registrationPendingStatusText);
+    }
     ui->resultLabel->setText(resultTipText);
 }
 
@@ -847,9 +880,17 @@ void IEEE14443ControlWidget::on_registerBtn_clicked()
     //生成待写入信息
     TagInfo info = defaultTagInfo();
     registrationFlowActive = true;
+    pauseForRegistration();
+    if(waitingReply)
+    {
+        registrationWritePending = true;
+        registrationPendingInfo = info;
+        registrationPendingStatusText = tr("Registering user info");
+        ui->parkingStatusLabel->setText(tr("Waiting for current operation"));
+        return;
+    }
     registrationVerificationPending = true;
     refreshAfterWrite = true;
-    pauseForRegistration();
     //向卡写信息
     writeUpdatedInfo(info);
     ui->parkingStatusLabel->setText(tr("Registering user info"));
