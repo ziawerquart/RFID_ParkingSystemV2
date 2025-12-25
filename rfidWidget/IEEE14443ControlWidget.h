@@ -7,6 +7,12 @@
 #include <QMap>
 #include <QDateTime>
 #include <QTimer>
+#include <QDialog>
+#include <QFormLayout>
+#include <QDialogButtonBox>
+#include <QLineEdit>
+#include <QSpinBox>
+#include <QComboBox>
 
 namespace Ui {
     class IEEE14443ControlWidget;
@@ -66,6 +72,11 @@ private:
     bool requiresInitialization;
     bool refreshAfterWrite;
     bool registrationPaused;
+    bool registrationFlowActive;
+    bool registrationVerificationPending;
+    bool registrationWritePending;
+    QString registrationPendingStatusText;
+    TagInfo registrationPendingInfo;
     bool rechargePaused;
     int pendingExitFee;
 
@@ -93,6 +104,9 @@ private:
     void updateInfoPanel(const TagInfo &info, const QDateTime &entryTime, const QDateTime &exitTime);
     TagInfo defaultTagInfo() const;
     void ensureInitialized();
+    void handleInvalidCard();
+    bool showRegistrationDialog(TagInfo &info);
+    void startRegistrationFlow();
     void handleParkingFlow();
     int calculateFee(const QDateTime &enterTime, const QDateTime &leaveTime) const;
     void writeUpdatedInfo(const TagInfo &info);
