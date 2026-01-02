@@ -591,7 +591,6 @@ void IEEE14443ControlWidget::handleParkingFlow()
     {
         if(parkingFlowState == ParkingFlowIdle)
         {
-            QMessageBox::information(this, tr("出场"), tr("成功出场"));
             parkingFlowState = ParkingFlowExit;
             parkingFlowPaused = true;
             stopAutoSearch();
@@ -636,7 +635,6 @@ void IEEE14443ControlWidget::handleParkingFlow()
     {
         if(parkingFlowState == ParkingFlowIdle)
         {
-            QMessageBox::information(this, tr("入场"), tr("成功入场"));
             parkingFlowState = ParkingFlowEntry;
             parkingFlowPaused = true;
             stopAutoSearch();
@@ -645,9 +643,9 @@ void IEEE14443ControlWidget::handleParkingFlow()
         entryTimeMap.insert(currentCardId, now);
         lastEntryTimeMap.insert(currentCardId, now);
         pendingExitFee = 0;
-        ui->parkingStatusLabel->setText(tr("入场成功，请收卡"));
         updateInfoPanel(currentInfo, now, QDateTime());
         QMessageBox::information(this, tr("入场"), tr("入场成功，请收卡"));
+        ui->parkingStatusLabel->setText(tr(""));
         parkingFlowState = ParkingFlowIdle;
         parkingFlowPaused = false;
         startAutoSearch();
@@ -897,7 +895,7 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
                 {
                     parkingExitWritePending = false;
                     QMessageBox::information(this, tr("出场"), tr("出场成功，请收卡"));
-                    ui->parkingStatusLabel->setText(tr("出场成功，请收卡"));
+                    ui->parkingStatusLabel->setText(tr(""));
                     parkingFlowState = ParkingFlowIdle;
                     parkingFlowPaused = false;
                     startAutoSearch();
