@@ -443,9 +443,10 @@ void IEEE14443ControlWidget::ensureInitialized()
             registrationFlowActive = false;
             updateInfoDisplay(info);
             updateInfoPanel(info, QDateTime(), QDateTime());
-            ui->parkingStatusLabel->setText(tr("写入成功，请立即收卡"));
+            ui->parkingStatusLabel->setText(tr("注册成功，请收卡"));
             registrationAwaitingRemoval = true;
             registrationAwaitingCardId = currentCardId;
+            QMessageBox::information(this, tr("注册成功"), tr("注册成功，请收卡"));
             resumeAfterRegistration();//继续自动寻卡
             return;
         }
@@ -463,9 +464,10 @@ void IEEE14443ControlWidget::ensureInitialized()
             currentInfo = info;
             if(info.balance == rechargeExpectedBalance)
             {
-                ui->parkingStatusLabel->setText(tr("写入成功，请收卡"));
+                ui->parkingStatusLabel->setText(tr("充值成功，余额为%1").arg(info.balance));
                 rechargeAwaitingRemoval = true;
                 rechargeAwaitingCardId = currentCardId;
+                QMessageBox::information(this, tr("充值成功"), tr("充值成功，余额为%1").arg(info.balance));
                 if(pendingExitFee > 0 && info.balance >= pendingExitFee)
                 {
                     resumeAfterRecharge();
@@ -488,14 +490,14 @@ void IEEE14443ControlWidget::ensureInitialized()
 
         if(registrationAwaitingRemoval && registrationAwaitingCardId == currentCardId)
         {
-            ui->parkingStatusLabel->setText(tr("写入成功，请立即收卡"));
+            ui->parkingStatusLabel->setText(tr("注册成功，请收卡"));
             return;
         }
         registrationAwaitingRemoval = false;
         registrationAwaitingCardId.clear();
         if(rechargeAwaitingRemoval && rechargeAwaitingCardId == currentCardId)
         {
-            ui->parkingStatusLabel->setText(tr("写入成功，请收卡"));
+            ui->parkingStatusLabel->setText(tr("充值成功，余额为%1").arg(info.balance));
             return;
         }
         rechargeAwaitingRemoval = false;
