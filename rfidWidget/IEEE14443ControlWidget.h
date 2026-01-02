@@ -125,7 +125,6 @@ private slots:
     void onPortDataReady();
     void onRecvedPackage(QByteArray pkg);
     void onStatusListScrollRangeChanced(int min, int max);
-    void on_registerBtn_clicked();//注册
     void on_rechargeBtn_clicked();//充值
     void onAutoSearchTimeout();//定时寻卡
 };

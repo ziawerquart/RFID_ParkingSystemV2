@@ -893,33 +893,6 @@ void IEEE14443ControlWidget::on_clearDisplayBtn_clicked()
 //    }
     ui->resultLabel->setText("");
 }
-//注册按钮
-void IEEE14443ControlWidget::on_registerBtn_clicked()
-{
-    //检查认证
-    if(!tagAuthenticated)
-    {
-        QMessageBox::warning(this, tr("Warning"), tr("authenticate first"));
-        return;
-    }
-    //生成待写入信息
-    TagInfo info = defaultTagInfo();
-    registrationFlowActive = true;
-    pauseForRegistration();
-    if(waitingReply)
-    {
-        registrationWritePending = true;
-        registrationPendingInfo = info;
-        registrationPendingStatusText = tr("Registering user info");
-        ui->parkingStatusLabel->setText(tr("Waiting for current operation"));
-        return;
-    }
-    registrationVerificationPending = true;
-    refreshAfterWrite = true;
-    //向卡写信息
-    writeUpdatedInfo(info);
-    ui->parkingStatusLabel->setText(tr("Registering user info"));
-}
 //充值按钮
 void IEEE14443ControlWidget::on_rechargeBtn_clicked()
 {
