@@ -897,7 +897,7 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
                 if(parkingExitWritePending && parkingFlowState == ParkingFlowExit && !rechargePaused)
                 {
                     parkingExitWritePending = false;
-                    QMessageBox::information(this, tr("出场"), tr("出场成功，请收卡，余额为%1").arg(lastExitFee));
+                    QMessageBox::information(this, tr("出场"), tr("出场成功，请收卡，费用为%1").arg(lastExitFee));
                     ui->parkingStatusLabel->setText(tr(""));
                     parkingFlowState = ParkingFlowIdle;
                     parkingFlowPaused = false;
