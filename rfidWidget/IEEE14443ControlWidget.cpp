@@ -914,6 +914,16 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
                 registrationAwaitingRemoval = false;
                 registrationAwaitingCardId.clear();
             }
+            // 新增：充值等待收卡
+            if(rechargeAwaitingRemoval)
+            {
+                rechargeAwaitingRemoval = false;
+                rechargeAwaitingCardId.clear();
+            }
+
+            // 无卡时清掉当前卡状态，避免“同卡再次放卡”被误判为没收卡
+            currentCardId.clear();
+            tagAuthenticated = false;
         }
         break;
     case IEEE1443Package::AntiColl:
