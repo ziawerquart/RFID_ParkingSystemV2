@@ -36,6 +36,12 @@ public:
         bool valid;//由块1开头签名判断是否为“停车系统格式卡”
         TagInfo() : balance(0), valid(false) {}
     };
+    enum ParkingFlowState
+    {
+        ParkingFlowIdle = 0,
+        ParkingFlowEntry,
+        ParkingFlowExit
+    };
 
 protected:
     void showEvent(QShowEvent *);
@@ -81,6 +87,9 @@ private:
     QString registrationAwaitingCardId;
     bool rechargePaused;
     int pendingExitFee;
+    bool parkingFlowPaused;
+    ParkingFlowState parkingFlowState;
+    bool parkingExitWritePending;
 
 
 private:
