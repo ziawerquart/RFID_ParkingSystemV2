@@ -424,7 +424,7 @@ IEEE14443ControlWidget::TagInfo IEEE14443ControlWidget::defaultTagInfo() const
     if(info.owner.isEmpty())
         info.owner = tr("Unknown");
     info.vehicleType = ui->vehicleTypeBox->currentText();
-    info.balance = ui->rechargeSpin->value();
+    info.balance = 0;
     info.valid = true;
     return info;
 }
@@ -569,7 +569,7 @@ bool IEEE14443ControlWidget::showRegistrationDialog(TagInfo &info)
 
     QSpinBox *balanceSpin = new QSpinBox(&dialog);
     balanceSpin->setRange(0, 100000);
-    balanceSpin->setValue(ui->rechargeSpin->value());
+    balanceSpin->setValue(0);
     form.addRow(tr("初始余额"), balanceSpin);
 
     QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, Qt::Horizontal, &dialog);
@@ -599,7 +599,7 @@ bool IEEE14443ControlWidget::showRechargeDialog(int &amount)
 
     QSpinBox *amountSpin = new QSpinBox(&dialog);
     amountSpin->setRange(1, 100000);
-    amountSpin->setValue(ui->rechargeSpin->value());
+    amountSpin->setValue(1);
     form.addRow(tr("金额"), amountSpin);
 
     QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, Qt::Horizontal, &dialog);
@@ -1127,12 +1127,6 @@ void IEEE14443ControlWidget::on_clearDisplayBtn_clicked()
 //    }
     ui->resultLabel->setText("");
 }
-//充值按钮
-void IEEE14443ControlWidget::on_rechargeBtn_clicked()
-{
-    startRechargeFlow(0);
-}
-
 //处理timeout信号
 void IEEE14443ControlWidget::onAutoSearchTimeout()
 {
