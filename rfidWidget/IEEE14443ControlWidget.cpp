@@ -25,6 +25,7 @@ IEEE14443ControlWidget::IEEE14443ControlWidget(QWidget *parent) :
     ui(new Ui::IEEE14443ControlWidget),
     commPort(NULL),
     autoSearchTimer(NULL),
+    replyTimeoutTimer(NULL),
     recvStatus(0),
     waitingReply(false),
     tagAuthenticated(false),
@@ -74,6 +75,11 @@ IEEE14443ControlWidget::IEEE14443ControlWidget(QWidget *parent) :
     autoSearchTimer->setInterval(500);
     //连接信号到槽函数
     connect(autoSearchTimer, SIGNAL(timeout()), this, SLOT(onAutoSearchTimeout()));
+    //等待回包超时定时器
+    replyTimeoutTimer = new QTimer(this);
+    replyTimeoutTimer->setInterval(250);
+    replyTimeoutTimer->setSingleShot(true);
+    connect(replyTimeoutTimer, SIGNAL(timeout()), this, SLOT(onReplyTimeout()));
     resetStatus();
 }
 
@@ -124,6 +130,8 @@ bool IEEE14443ControlWidget::stop()
         delete commPort;
     }
     commPort = NULL;
+    if(replyTimeoutTimer)
+        replyTimeoutTimer->stop();
     stopAutoSearch();
     return true;
 }
@@ -170,6 +178,8 @@ void IEEE14443ControlWidget::resetStatus()
     ui->balanceEdit->setText("");
     ui->parkingStatusLabel->setText("");
     waitingReply = false;
+    if(replyTimeoutTimer)
+        replyTimeoutTimer->stop();
     tagAuthenticated = false;
     currentCardId.clear();
     lastBlock1.clear();
@@ -263,6 +273,8 @@ void IEEE14443ControlWidget::requestSearch()
         return;
     lastSendPackage = IEEE1443Package(0, IEEE1443Package::SearchCard, 0x52).toPurePackage();
     sendData(lastSendPackage);
+    if(replyTimeoutTimer)
+        replyTimeoutTimer->start();
 }
 //请求防冲突
 void IEEE14443ControlWidget::requestAntiColl()
@@ -879,6 +891,8 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
 //    IEEE1443PackageWidget *w = new IEEE1443PackageWidget(tr("Recv"), pkg, this);
 //    ui->statusListLayout->addWidget(w);
 //    w->show();
+    if(replyTimeoutTimer && replyTimeoutTimer->isActive())
+        replyTimeoutTimer->stop();
     IEEE1443Package p(pkg);
     //qDebug()<<"the recieve pkg"<<pkg.toHex();
     qDebug() << QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
@@ -1149,6 +1163,29 @@ void IEEE14443ControlWidget::onAutoSearchTimeout()
     if(registrationPaused || rechargePaused || requiresInitialization || parkingFlowPaused)
         return;
     requestSearch();//每过一小段时间，就请求寻卡
+}
+
+void IEEE14443ControlWidget::onReplyTimeout()
+{
+    if(!waitingReply)
+        return;
+    waitingReply = false;
+    IEEE1443Package p(lastSendPackage);
+    if(!p.isValid() || p.command() != IEEE1443Package::SearchCard)
+        return;
+    if(registrationAwaitingRemoval)
+    {
+        registrationAwaitingRemoval = false;
+        registrationAwaitingCardId.clear();
+    }
+    if(rechargeAwaitingRemoval)
+    {
+        rechargeAwaitingRemoval = false;
+        rechargeAwaitingCardId.clear();
+    }
+    currentCardId.clear();
+    tagAuthenticated = false;
+    ui->resultLabel->setText(tr("Search Card Failure"));
 }
 
 //寻卡按钮

@@ -59,6 +59,7 @@ private:
     //QextSerialPort *commPort;
     Posix_QextSerialPort *commPort;
     QTimer *autoSearchTimer;//自动寻卡-定时器
+    QTimer *replyTimeoutTimer;//等待回包-定时器
     QTimer *readTimer;
     QByteArray lastSendPackage;
     int recvStatus;
@@ -146,6 +147,7 @@ private slots:
     void onRecvedPackage(QByteArray pkg);
     void onStatusListScrollRangeChanced(int min, int max);
     void onAutoSearchTimeout();//定时寻卡
+    void onReplyTimeout();//等待回包超时
 };
 
 #endif // IEEE14443CONTROLWIDGET_H
