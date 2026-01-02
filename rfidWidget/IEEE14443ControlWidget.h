@@ -65,6 +65,7 @@ private:
     int recvStatus;
     QByteArray lastRecvPackage;
     bool waitingReply;//自动寻卡——是否等回复
+    int pendingCommand;//自动寻卡——等待回包的命令
     QString currentCardId;//自动寻卡——当前识别到的ID
     bool tagAuthenticated;//自动寻卡——是否认证成功
     QByteArray lastBlock1;//缓存块1、2数据

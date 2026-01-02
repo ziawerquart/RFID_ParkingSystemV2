@@ -28,6 +28,7 @@ IEEE14443ControlWidget::IEEE14443ControlWidget(QWidget *parent) :
     replyTimeoutTimer(NULL),
     recvStatus(0),
     waitingReply(false),
+    pendingCommand(-1),
     tagAuthenticated(false),
     pendingReadBlock(-1),
     pendingWriteBlock(-1),
@@ -132,6 +133,8 @@ bool IEEE14443ControlWidget::stop()
     commPort = NULL;
     if(replyTimeoutTimer)
         replyTimeoutTimer->stop();
+    waitingReply = false;
+    pendingCommand = -1;
     stopAutoSearch();
     return true;
 }
@@ -145,11 +148,16 @@ bool IEEE14443ControlWidget::sendData(const QByteArray &data)
     {
         //qDebug()<<"send data = "<<data.toHex();
         //qDebug()<<"rawPackage = "<<IEEE1443Package(data).toRawPackage().toHex();
-        QByteArray rawPackage = IEEE1443Package(data).toRawPackage();
+        IEEE1443Package pkg(data);
+        QByteArray rawPackage = pkg.toRawPackage();
         qDebug() << QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
                  << QString("send %1").arg(QString(rawPackage.toHex()));
         commPort->write(rawPackage);
         waitingReply = true;
+        if(pkg.isValid())
+            pendingCommand = pkg.command();
+        else
+            pendingCommand = -1;
     }
     return true;
 }
@@ -178,6 +186,7 @@ void IEEE14443ControlWidget::resetStatus()
     ui->balanceEdit->setText("");
     ui->parkingStatusLabel->setText("");
     waitingReply = false;
+    pendingCommand = -1;
     if(replyTimeoutTimer)
         replyTimeoutTimer->stop();
     tagAuthenticated = false;
@@ -891,9 +900,14 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
 //    IEEE1443PackageWidget *w = new IEEE1443PackageWidget(tr("Recv"), pkg, this);
 //    ui->statusListLayout->addWidget(w);
 //    w->show();
-    if(replyTimeoutTimer && replyTimeoutTimer->isActive())
-        replyTimeoutTimer->stop();
     IEEE1443Package p(pkg);
+    if(!p.isValid())
+        return;
+    if(waitingReply && pendingCommand >= 0 && p.command() != pendingCommand)
+        return;
+    if(replyTimeoutTimer && replyTimeoutTimer->isActive()
+            && p.command() == IEEE1443Package::SearchCard)
+        replyTimeoutTimer->stop();
     //qDebug()<<"the recieve pkg"<<pkg.toHex();
     qDebug() << QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
              << QString("recieve cmd=0x%1 data=%2")
@@ -905,11 +919,13 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
         qDebug() << QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
                  << "empty payload for cmd" << p.command();
         waitingReply = false;
+        pendingCommand = -1;
         return;
     }
     int status = d.at(0);
     d = d.mid(1);
     waitingReply = false;
+    pendingCommand = -1;
     QString resultTipText;
     switch(p.command())
     {
@@ -1167,9 +1183,10 @@ void IEEE14443ControlWidget::onAutoSearchTimeout()
 
 void IEEE14443ControlWidget::onReplyTimeout()
 {
-    if(!waitingReply)
+    if(!waitingReply || pendingCommand != IEEE1443Package::SearchCard)
         return;
     waitingReply = false;
+    pendingCommand = -1;
     IEEE1443Package p(lastSendPackage);
     if(!p.isValid() || p.command() != IEEE1443Package::SearchCard)
         return;
