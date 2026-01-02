@@ -77,6 +77,8 @@ private:
     bool registrationWritePending;
     QString registrationPendingStatusText;
     TagInfo registrationPendingInfo;
+    bool registrationAwaitingRemoval;
+    QString registrationAwaitingCardId;
     bool rechargePaused;
     int pendingExitFee;
 

@@ -36,6 +36,8 @@ IEEE14443ControlWidget::IEEE14443ControlWidget(QWidget *parent) :
     registrationVerificationPending(false),
     registrationWritePending(false),
     registrationPendingStatusText(),
+    registrationAwaitingRemoval(false),
+    registrationAwaitingCardId(),
     rechargePaused(false),
     pendingExitFee(0)
 {
@@ -169,6 +171,8 @@ void IEEE14443ControlWidget::resetStatus()
     registrationVerificationPending = false;
     registrationWritePending = false;
     registrationPendingStatusText.clear();
+    registrationAwaitingRemoval = false;
+    registrationAwaitingCardId.clear();
     rechargePaused = false;
     pendingExitFee = 0;
     lastEntryTimeMap.clear();
@@ -416,11 +420,21 @@ void IEEE14443ControlWidget::ensureInitialized()
             updateInfoDisplay(info);
             updateInfoPanel(info, QDateTime(), QDateTime());
             ui->parkingStatusLabel->setText(tr("写入成功，请立即收卡"));
+            registrationAwaitingRemoval = true;
+            registrationAwaitingCardId = currentCardId;
             resumeAfterRegistration();//继续自动寻卡
             return;
         }
 
         resumeAfterRegistration();//继续自动寻卡
+
+        if(registrationAwaitingRemoval && registrationAwaitingCardId == currentCardId)
+        {
+            ui->parkingStatusLabel->setText(tr("写入成功，请立即收卡"));
+            return;
+        }
+        registrationAwaitingRemoval = false;
+        registrationAwaitingCardId.clear();
 
         //更新展示信息
         updateInfoDisplay(info);
@@ -449,6 +463,8 @@ void IEEE14443ControlWidget::handleInvalidCard()
         registrationVerificationPending = false;
         registrationFlowActive = false;
         requiresInitialization = false;
+        registrationAwaitingRemoval = false;
+        registrationAwaitingCardId.clear();
         ui->parkingStatusLabel->setText(tr("写入失败，请重新刷卡"));
         QMessageBox::warning(this, tr("注册失败"), tr("写入失败，请重新刷卡"));
         resumeAfterRegistration();
@@ -516,6 +532,8 @@ void IEEE14443ControlWidget::startRegistrationFlow()
     {
         registrationFlowActive = false;
         requiresInitialization = false;
+        registrationAwaitingRemoval = false;
+        registrationAwaitingCardId.clear();
         resumeAfterRegistration();
         ui->parkingStatusLabel->setText(tr("注册已取消"));
         return;
@@ -710,7 +728,14 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
             requestAntiColl();
         }
         else
+        {
             resultTipText += tr("Failure");
+            if(registrationAwaitingRemoval)
+            {
+                registrationAwaitingRemoval = false;
+                registrationAwaitingCardId.clear();
+            }
+        }
         break;
     case IEEE1443Package::AntiColl:
         resultTipText = tr("AntiColl ");
