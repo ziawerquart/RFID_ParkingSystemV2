@@ -29,6 +29,7 @@ IEEE14443ControlWidget::IEEE14443ControlWidget(QWidget *parent) :
     recvStatus(0),
     waitingReply(false),
     pendingCommand(-1),
+    autoSearchInProgress(false),
     tagAuthenticated(false),
     pendingReadBlock(-1),
     pendingWriteBlock(-1),
@@ -135,6 +136,7 @@ bool IEEE14443ControlWidget::stop()
         replyTimeoutTimer->stop();
     waitingReply = false;
     pendingCommand = -1;
+    autoSearchInProgress = false;
     stopAutoSearch();
     return true;
 }
@@ -187,6 +189,7 @@ void IEEE14443ControlWidget::resetStatus()
     ui->parkingStatusLabel->setText("");
     waitingReply = false;
     pendingCommand = -1;
+    autoSearchInProgress = false;
     if(replyTimeoutTimer)
         replyTimeoutTimer->stop();
     tagAuthenticated = false;
@@ -278,10 +281,11 @@ void IEEE14443ControlWidget::resumeAfterRecharge()
 //请求寻卡
 void IEEE14443ControlWidget::requestSearch()
 {
-    if(waitingReply)
+    if(waitingReply || autoSearchInProgress)
         return;
     lastSendPackage = IEEE1443Package(0, IEEE1443Package::SearchCard, 0x52).toPurePackage();
     sendData(lastSendPackage);
+    autoSearchInProgress = true;
     if(replyTimeoutTimer)
         replyTimeoutTimer->start();
 }
@@ -920,6 +924,7 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
                  << "empty payload for cmd" << p.command();
         waitingReply = false;
         pendingCommand = -1;
+        autoSearchInProgress = false;
         return;
     }
     int status = d.at(0);
@@ -939,6 +944,7 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
         else
         {
             resultTipText += tr("Failure");
+            autoSearchInProgress = false;
             if(registrationAwaitingRemoval)
             {
                 registrationAwaitingRemoval = false;
@@ -967,7 +973,10 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
             requestSelect(d);
         }
         else
+        {
             resultTipText += tr("Failure");
+            autoSearchInProgress = false;
+        }
         break;
     case IEEE1443Package::SelectCard:
         resultTipText = tr("Select Card ");
@@ -992,7 +1001,10 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
             requestAuth(kUserBlock1);
         }
         else
+        {
             resultTipText += tr("Failure");
+            autoSearchInProgress = false;
+        }
         break;
     case IEEE1443Package::Authentication:
         resultTipText = tr("Authentication ");
@@ -1003,6 +1015,8 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
         tagAuthenticated = (status == 0);
         if(tagAuthenticated)
             requestRead(kUserBlock1);//停车系统实现自动识别卡片功能，自动读块1用于判断是不是停车系统
+        else
+            autoSearchInProgress = false;
         break;
     case IEEE1443Package::ReadCard:
         resultTipText = tr("Read Card ");
@@ -1024,12 +1038,14 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
                 pendingReadBlock = -1;
                 //确认初始化
                 ensureInitialized();
+                autoSearchInProgress = false;
             }
         }
         else
         {
             resultTipText += tr("Failure");
             pendingReadBlock = -1;
+            autoSearchInProgress = false;
             if(rechargeVerificationPending)
             {
                 rechargeVerificationPending = false;
@@ -1178,6 +1194,8 @@ void IEEE14443ControlWidget::onAutoSearchTimeout()
 {
     if(registrationPaused || rechargePaused || requiresInitialization || parkingFlowPaused)
         return;
+    if(autoSearchInProgress)
+        return;
     requestSearch();//每过一小段时间，就请求寻卡
 }
 
@@ -1187,6 +1205,7 @@ void IEEE14443ControlWidget::onReplyTimeout()
         return;
     waitingReply = false;
     pendingCommand = -1;
+    autoSearchInProgress = false;
     IEEE1443Package p(lastSendPackage);
     if(!p.isValid() || p.command() != IEEE1443Package::SearchCard)
         return;
