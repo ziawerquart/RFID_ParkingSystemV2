@@ -39,7 +39,11 @@ IEEE14443ControlWidget::IEEE14443ControlWidget(QWidget *parent) :
     registrationAwaitingRemoval(false),
     registrationAwaitingCardId(),
     rechargePaused(false),
-    pendingExitFee(0)
+    pendingExitFee(0),
+    parkingFlowPaused(false),
+    parkingFlowState(ParkingFlowIdle),
+    parkingExitWritePending(false),
+    lastExitFee(0)
 {
     ui->setupUi(this);
     ui->dataEdit->setOverwriteMode(true);
@@ -175,6 +179,10 @@ void IEEE14443ControlWidget::resetStatus()
     registrationAwaitingCardId.clear();
     rechargePaused = false;
     pendingExitFee = 0;
+    parkingFlowPaused = false;
+    parkingFlowState = ParkingFlowIdle;
+    parkingExitWritePending = false;
+    lastExitFee = 0;
     lastEntryTimeMap.clear();
     lastExitTimeMap.clear();
     entryTimeMap.clear();
@@ -186,7 +194,7 @@ void IEEE14443ControlWidget::resetStatus()
 void IEEE14443ControlWidget::startAutoSearch()
 {
     //检查是否需要暂停自动寻卡
-    if(registrationPaused || rechargePaused)//当因注册或收费需要暂停时，不自动寻卡
+    if(registrationPaused || rechargePaused || parkingFlowPaused)//当因注册或收费需要暂停时，不自动寻卡
         return;
     // 检查定时器是否有效且未激活
     if(autoSearchTimer && !autoSearchTimer->isActive())
@@ -583,6 +591,13 @@ void IEEE14443ControlWidget::handleParkingFlow()
     //若entryTimeMap包括当前卡号——出场
     if(entryTimeMap.contains(currentCardId))
     {
+        if(parkingFlowState == ParkingFlowIdle)
+        {
+            parkingFlowState = ParkingFlowExit;
+            parkingFlowPaused = true;
+            stopAutoSearch();
+            ui->parkingStatusLabel->setText(tr("正在出场中，不要收卡"));
+        }
         //获取入场时间
         QDateTime enter = entryTimeMap.value(currentCardId);
         //算钱
@@ -591,11 +606,11 @@ void IEEE14443ControlWidget::handleParkingFlow()
         if(currentInfo.balance < fee)
         {
             //ui提醒
-            ui->parkingStatusLabel->setText(tr("Insufficient balance, fee %1").arg(fee));
+            ui->parkingStatusLabel->setText(tr("余额不足，请先充值"));
             updateInfoPanel(currentInfo, enter, QDateTime());
             //暂停自动寻卡
             pauseForRecharge(fee);
-            QMessageBox::warning(this, tr("Recharge"), tr("Balance is not enough, please recharge before leaving."));
+            QMessageBox::warning(this, tr("出场"), tr("余额不足，请先充值"));
             return;
         }
 
@@ -607,26 +622,36 @@ void IEEE14443ControlWidget::handleParkingFlow()
         lastEntryTimeMap.insert(currentCardId, enter);
         //扣费
         currentInfo.balance -= fee;
-        ui->parkingStatusLabel->setText(tr("Stayed %1 min, fee %2").arg(enter.secsTo(now)/60).arg(fee));
+        lastExitFee = fee;
+        ui->parkingStatusLabel->setText(tr("正在出场中，不要收卡"));
         updateInfoDisplay(currentInfo);
         updateInfoPanel(currentInfo, QDateTime(), now);
-
-        //继续自动寻卡
-        resumeAfterRecharge();
 
         //不需要读回
         refreshAfterWrite = false;
 
         //写入当前信息
+        parkingExitWritePending = true;
         writeUpdatedInfo(currentInfo);
     }
     else//入场
     {
+        if(parkingFlowState == ParkingFlowIdle)
+        {
+            parkingFlowState = ParkingFlowEntry;
+            parkingFlowPaused = true;
+            stopAutoSearch();
+            ui->parkingStatusLabel->setText(tr("正在入场中，不要收卡"));
+        }
         entryTimeMap.insert(currentCardId, now);
         lastEntryTimeMap.insert(currentCardId, now);
         pendingExitFee = 0;
-        ui->parkingStatusLabel->setText(tr("Entry time %1").arg(now.toString("hh:mm:ss")));
         updateInfoPanel(currentInfo, now, QDateTime());
+        QMessageBox::information(this, tr("入场"), tr("入场成功，请收卡"));
+        ui->parkingStatusLabel->setText(tr(""));
+        parkingFlowState = ParkingFlowIdle;
+        parkingFlowPaused = false;
+        startAutoSearch();
     }
 }
 //把占两个块的车主信息写进卡里
@@ -811,6 +836,20 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
         {
             resultTipText += tr("Failure");
             pendingReadBlock = -1;
+            if(!registrationFlowActive && !requiresInitialization && !currentCardId.isEmpty())
+            {
+                if(entryTimeMap.contains(currentCardId))
+                    QMessageBox::warning(this, tr("出场"), tr("出场失败，请重新刷卡"));
+                else
+                    QMessageBox::warning(this, tr("入场"), tr("入场失败，请重新刷卡"));
+                ui->parkingStatusLabel->setText(entryTimeMap.contains(currentCardId)
+                                                ? tr("出场失败，请重新刷卡")
+                                                : tr("入场失败，请重新刷卡"));
+                parkingFlowState = ParkingFlowIdle;
+                parkingFlowPaused = false;
+                parkingExitWritePending = false;
+                startAutoSearch();
+            }
         }
         break;
     case IEEE1443Package::WriteCard:
@@ -855,6 +894,17 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
                     }
                 }
 
+                if(parkingExitWritePending && parkingFlowState == ParkingFlowExit && !rechargePaused)
+                {
+                    parkingExitWritePending = false;
+                    QMessageBox::information(this, tr("出场"), tr("出场成功，请收卡，余额为%1").arg(lastExitFee));
+                    ui->parkingStatusLabel->setText(tr(""));
+                    parkingFlowState = ParkingFlowIdle;
+                    parkingFlowPaused = false;
+                    lastExitFee = 0;
+                    startAutoSearch();
+                }
+
             }
         }
         else
@@ -862,6 +912,16 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
             resultTipText += tr("Failure");
             pendingWriteBlock = -1;
             refreshAfterWrite = false;
+            if(parkingExitWritePending && parkingFlowState == ParkingFlowExit)
+            {
+                parkingExitWritePending = false;
+                QMessageBox::warning(this, tr("出场"), tr("出场失败，请重新刷卡"));
+                ui->parkingStatusLabel->setText(tr("出场失败，请重新刷卡"));
+                parkingFlowState = ParkingFlowIdle;
+                parkingFlowPaused = false;
+                lastExitFee = 0;
+                startAutoSearch();
+            }
         }
         break;
     }
@@ -931,7 +991,7 @@ void IEEE14443ControlWidget::on_rechargeBtn_clicked()
 //处理timeout信号
 void IEEE14443ControlWidget::onAutoSearchTimeout()
 {
-    if(registrationPaused || rechargePaused || requiresInitialization)
+    if(registrationPaused || rechargePaused || requiresInitialization || parkingFlowPaused)
         return;
     requestSearch();//每过一小段时间，就请求寻卡
 }
