@@ -25,8 +25,11 @@ IEEE14443ControlWidget::IEEE14443ControlWidget(QWidget *parent) :
     ui(new Ui::IEEE14443ControlWidget),
     commPort(NULL),
     autoSearchTimer(NULL),
+    replyTimeoutTimer(NULL),
     recvStatus(0),
     waitingReply(false),
+    pendingCommand(-1),
+    autoSearchInProgress(false),
     tagAuthenticated(false),
     pendingReadBlock(-1),
     pendingWriteBlock(-1),
@@ -74,6 +77,11 @@ IEEE14443ControlWidget::IEEE14443ControlWidget(QWidget *parent) :
     autoSearchTimer->setInterval(500);
     //连接信号到槽函数
     connect(autoSearchTimer, SIGNAL(timeout()), this, SLOT(onAutoSearchTimeout()));
+    //等待回包超时定时器
+    replyTimeoutTimer = new QTimer(this);
+    replyTimeoutTimer->setInterval(250);
+    replyTimeoutTimer->setSingleShot(true);
+    connect(replyTimeoutTimer, SIGNAL(timeout()), this, SLOT(onReplyTimeout()));
     resetStatus();
 }
 
@@ -124,6 +132,11 @@ bool IEEE14443ControlWidget::stop()
         delete commPort;
     }
     commPort = NULL;
+    if(replyTimeoutTimer)
+        replyTimeoutTimer->stop();
+    waitingReply = false;
+    pendingCommand = -1;
+    autoSearchInProgress = false;
     stopAutoSearch();
     return true;
 }
@@ -137,11 +150,16 @@ bool IEEE14443ControlWidget::sendData(const QByteArray &data)
     {
         //qDebug()<<"send data = "<<data.toHex();
         //qDebug()<<"rawPackage = "<<IEEE1443Package(data).toRawPackage().toHex();
-        QByteArray rawPackage = IEEE1443Package(data).toRawPackage();
+        IEEE1443Package pkg(data);
+        QByteArray rawPackage = pkg.toRawPackage();
         qDebug() << QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
                  << QString("send %1").arg(QString(rawPackage.toHex()));
         commPort->write(rawPackage);
         waitingReply = true;
+        if(pkg.isValid())
+            pendingCommand = pkg.command();
+        else
+            pendingCommand = -1;
     }
     return true;
 }
@@ -170,6 +188,10 @@ void IEEE14443ControlWidget::resetStatus()
     ui->balanceEdit->setText("");
     ui->parkingStatusLabel->setText("");
     waitingReply = false;
+    pendingCommand = -1;
+    autoSearchInProgress = false;
+    if(replyTimeoutTimer)
+        replyTimeoutTimer->stop();
     tagAuthenticated = false;
     currentCardId.clear();
     lastBlock1.clear();
@@ -259,10 +281,13 @@ void IEEE14443ControlWidget::resumeAfterRecharge()
 //请求寻卡
 void IEEE14443ControlWidget::requestSearch()
 {
-    if(waitingReply)
+    if(waitingReply || autoSearchInProgress)
         return;
     lastSendPackage = IEEE1443Package(0, IEEE1443Package::SearchCard, 0x52).toPurePackage();
     sendData(lastSendPackage);
+    autoSearchInProgress = true;
+    if(replyTimeoutTimer)
+        replyTimeoutTimer->start();
 }
 //请求防冲突
 void IEEE14443ControlWidget::requestAntiColl()
@@ -880,6 +905,13 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
 //    ui->statusListLayout->addWidget(w);
 //    w->show();
     IEEE1443Package p(pkg);
+    if(!p.isValid())
+        return;
+    if(waitingReply && pendingCommand >= 0 && p.command() != pendingCommand)
+        return;
+    if(replyTimeoutTimer && replyTimeoutTimer->isActive()
+            && p.command() == IEEE1443Package::SearchCard)
+        replyTimeoutTimer->stop();
     //qDebug()<<"the recieve pkg"<<pkg.toHex();
     qDebug() << QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
              << QString("recieve cmd=0x%1 data=%2")
@@ -891,11 +923,14 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
         qDebug() << QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
                  << "empty payload for cmd" << p.command();
         waitingReply = false;
+        pendingCommand = -1;
+        autoSearchInProgress = false;
         return;
     }
     int status = d.at(0);
     d = d.mid(1);
     waitingReply = false;
+    pendingCommand = -1;
     QString resultTipText;
     switch(p.command())
     {
@@ -909,6 +944,7 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
         else
         {
             resultTipText += tr("Failure");
+            autoSearchInProgress = false;
             if(registrationAwaitingRemoval)
             {
                 registrationAwaitingRemoval = false;
@@ -937,7 +973,10 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
             requestSelect(d);
         }
         else
+        {
             resultTipText += tr("Failure");
+            autoSearchInProgress = false;
+        }
         break;
     case IEEE1443Package::SelectCard:
         resultTipText = tr("Select Card ");
@@ -962,7 +1001,10 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
             requestAuth(kUserBlock1);
         }
         else
+        {
             resultTipText += tr("Failure");
+            autoSearchInProgress = false;
+        }
         break;
     case IEEE1443Package::Authentication:
         resultTipText = tr("Authentication ");
@@ -973,6 +1015,8 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
         tagAuthenticated = (status == 0);
         if(tagAuthenticated)
             requestRead(kUserBlock1);//停车系统实现自动识别卡片功能，自动读块1用于判断是不是停车系统
+        else
+            autoSearchInProgress = false;
         break;
     case IEEE1443Package::ReadCard:
         resultTipText = tr("Read Card ");
@@ -994,12 +1038,14 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
                 pendingReadBlock = -1;
                 //确认初始化
                 ensureInitialized();
+                autoSearchInProgress = false;
             }
         }
         else
         {
             resultTipText += tr("Failure");
             pendingReadBlock = -1;
+            autoSearchInProgress = false;
             if(rechargeVerificationPending)
             {
                 rechargeVerificationPending = false;
@@ -1148,7 +1194,34 @@ void IEEE14443ControlWidget::onAutoSearchTimeout()
 {
     if(registrationPaused || rechargePaused || requiresInitialization || parkingFlowPaused)
         return;
+    if(autoSearchInProgress)
+        return;
     requestSearch();//每过一小段时间，就请求寻卡
+}
+
+void IEEE14443ControlWidget::onReplyTimeout()
+{
+    if(!waitingReply || pendingCommand != IEEE1443Package::SearchCard)
+        return;
+    waitingReply = false;
+    pendingCommand = -1;
+    autoSearchInProgress = false;
+    IEEE1443Package p(lastSendPackage);
+    if(!p.isValid() || p.command() != IEEE1443Package::SearchCard)
+        return;
+    if(registrationAwaitingRemoval)
+    {
+        registrationAwaitingRemoval = false;
+        registrationAwaitingCardId.clear();
+    }
+    if(rechargeAwaitingRemoval)
+    {
+        rechargeAwaitingRemoval = false;
+        rechargeAwaitingCardId.clear();
+    }
+    currentCardId.clear();
+    tagAuthenticated = false;
+    ui->resultLabel->setText(tr("Search Card Failure"));
 }
 
 //寻卡按钮
