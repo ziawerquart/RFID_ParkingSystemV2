@@ -86,31 +86,10 @@
           </property>
          </widget>
         </item>
-        <item row="1" column="2">
-         <widget class="QLabel" name="label_recharge">
-          <property name="text">
-           <string>Recharge Amount:</string>
-          </property>
-         </widget>
-        </item>
-        <item row="1" column="3">
-         <widget class="QSpinBox" name="rechargeSpin">
-          <property name="maximum">
-           <number>100000</number>
-          </property>
-         </widget>
-        </item>
        </layout>
       </item>
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout_infoButtons">
-        <item>
-         <widget class="QPushButton" name="rechargeBtn">
-          <property name="text">
-           <string>Recharge</string>
-          </property>
-         </widget>
-        </item>
         <item>
          <widget class="QLabel" name="parkingStatusLabel">
           <property name="text">

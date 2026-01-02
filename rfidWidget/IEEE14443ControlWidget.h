@@ -86,6 +86,14 @@ private:
     bool registrationAwaitingRemoval;
     QString registrationAwaitingCardId;
     bool rechargePaused;
+    bool rechargeFlowActive;
+    bool rechargeVerificationPending;
+    bool rechargeWritePending;
+    QString rechargePendingStatusText;
+    TagInfo rechargePendingInfo;
+    int rechargeExpectedBalance;
+    bool rechargeAwaitingRemoval;
+    QString rechargeAwaitingCardId;
     int pendingExitFee;
     bool parkingFlowPaused;
     ParkingFlowState parkingFlowState;
@@ -119,6 +127,8 @@ private:
     void handleInvalidCard();
     bool showRegistrationDialog(TagInfo &info);
     void startRegistrationFlow();
+    bool showRechargeDialog(int &amount);
+    void startRechargeFlow(int feeRequired);
     void handleParkingFlow();
     int calculateFee(const QDateTime &enterTime, const QDateTime &leaveTime) const;
     void writeUpdatedInfo(const TagInfo &info);
@@ -135,7 +145,6 @@ private slots:
     void onPortDataReady();
     void onRecvedPackage(QByteArray pkg);
     void onStatusListScrollRangeChanced(int min, int max);
-    void on_rechargeBtn_clicked();//充值
     void onAutoSearchTimeout();//定时寻卡
 };
 
