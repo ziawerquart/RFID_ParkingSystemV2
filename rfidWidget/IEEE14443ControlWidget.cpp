@@ -32,6 +32,12 @@ IEEE14443ControlWidget::IEEE14443ControlWidget(QWidget *parent) :
     requiresInitialization(false),
     refreshAfterWrite(false),
     registrationPaused(false),
+    registrationFlowActive(false),
+    registrationVerificationPending(false),
+    registrationWritePending(false),
+    registrationPendingStatusText(),
+    registrationAwaitingRemoval(false),
+    registrationAwaitingCardId(),
     rechargePaused(false),
     pendingExitFee(0)
 {
@@ -161,6 +167,12 @@ void IEEE14443ControlWidget::resetStatus()
     requiresInitialization = false;
     refreshAfterWrite = false;
     registrationPaused = false;
+    registrationFlowActive = false;
+    registrationVerificationPending = false;
+    registrationWritePending = false;
+    registrationPendingStatusText.clear();
+    registrationAwaitingRemoval = false;
+    registrationAwaitingCardId.clear();
     rechargePaused = false;
     pendingExitFee = 0;
     lastEntryTimeMap.clear();
@@ -246,6 +258,8 @@ void IEEE14443ControlWidget::requestSelect(const QByteArray &cardId)
 //请求认证
 void IEEE14443ControlWidget::requestAuth(quint8 blockNumber)
 {
+    if(waitingReply)
+        return;
     QByteArray authInfo;
     authInfo.append(0x60);
     authInfo.append((char)blockNumber);
@@ -262,6 +276,8 @@ void IEEE14443ControlWidget::requestAuth(quint8 blockNumber)
 //请求读卡
 void IEEE14443ControlWidget::requestRead(quint8 blockNumber)
 {
+    if(waitingReply)
+        return;
     pendingReadBlock = blockNumber;
     IEEE1443Package pkg(0, 0x4B, (char)blockNumber);
     lastSendPackage = pkg.toPurePackage();
@@ -270,6 +286,8 @@ void IEEE14443ControlWidget::requestRead(quint8 blockNumber)
 //请求写卡
 void IEEE14443ControlWidget::requestWrite(quint8 blockNumber, const QByteArray &data)
 {
+    if(waitingReply)
+        return;
     if(data.size() != 16)
     {
         QMessageBox::warning(this, tr("Warning"), tr("write data error"));
@@ -395,7 +413,28 @@ void IEEE14443ControlWidget::ensureInitialized()
     {
         //不需要初始化
         requiresInitialization = false;
+        if(registrationVerificationPending)//注册流程验证
+        {
+            registrationVerificationPending = false;
+            registrationFlowActive = false;
+            updateInfoDisplay(info);
+            updateInfoPanel(info, QDateTime(), QDateTime());
+            ui->parkingStatusLabel->setText(tr("写入成功，请立即收卡"));
+            registrationAwaitingRemoval = true;
+            registrationAwaitingCardId = currentCardId;
+            resumeAfterRegistration();//继续自动寻卡
+            return;
+        }
+
         resumeAfterRegistration();//继续自动寻卡
+
+        if(registrationAwaitingRemoval && registrationAwaitingCardId == currentCardId)
+        {
+            ui->parkingStatusLabel->setText(tr("写入成功，请立即收卡"));
+            return;
+        }
+        registrationAwaitingRemoval = false;
+        registrationAwaitingCardId.clear();
 
         //更新展示信息
         updateInfoDisplay(info);
@@ -403,23 +442,114 @@ void IEEE14443ControlWidget::ensureInitialized()
                                      entryTimeMap.value(currentCardId) :
                                      lastEntryTimeMap.value(currentCardId);
         updateInfoPanel(info, entryDisplayTime, lastExitTimeMap.value(currentCardId));
-        //进行出入场逻辑
-        handleParkingFlow();
+        //进行出入场逻辑（注册流程不进行出入场判断）
+        if(!registrationFlowActive)
+            handleParkingFlow();
         return;
     }
-    //只在第一次进入未初始化状态时提示要初始化
-    if(!requiresInitialization)
-        QMessageBox::information(this, tr("Initialization"), tr("Please fill user info and click Register to initialize the card."));
+    handleInvalidCard();
+}
+
+//处理无效卡片，进入注册流程
+void IEEE14443ControlWidget::handleInvalidCard()
+{
     //清理停车状态
     entryTimeMap.remove(currentCardId);
     lastEntryTimeMap.remove(currentCardId);
-    //暂停
+
+    //注册写卡后验证失败
+    if(registrationVerificationPending)
+    {
+        registrationVerificationPending = false;
+        registrationFlowActive = false;
+        requiresInitialization = false;
+        registrationAwaitingRemoval = false;
+        registrationAwaitingCardId.clear();
+        ui->parkingStatusLabel->setText(tr("写入失败，请重新刷卡"));
+        QMessageBox::warning(this, tr("注册失败"), tr("写入失败，请重新刷卡"));
+        resumeAfterRegistration();
+        return;
+    }
+
+    //只在第一次进入未初始化状态时提示要初始化
+    if(!requiresInitialization)
+        QMessageBox::information(this, tr("未注册卡片"), tr("请先注册，不要收卡"));
     requiresInitialization = true;
     pauseForRegistration();
-    //清空面板
     currentInfo = TagInfo();
     updateInfoPanel(TagInfo(), QDateTime(), QDateTime());
     ui->parkingStatusLabel->setText(tr("Card not initialized, please register"));
+
+    if(!registrationFlowActive)
+        startRegistrationFlow();
+}
+
+//弹出注册对话框，采集用户信息
+bool IEEE14443ControlWidget::showRegistrationDialog(TagInfo &info)
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("注册新卡"));
+    QFormLayout form(&dialog);
+
+    QLineEdit *nameEdit = new QLineEdit(&dialog);
+    nameEdit->setMaxLength(12);
+    nameEdit->setText(ui->ownerNameEdit->text());
+    form.addRow(tr("姓名"), nameEdit);
+
+    QComboBox *vehicleBox = new QComboBox(&dialog);
+    vehicleBox->addItems(QStringList() << "Sedan" << "SUV" << "Truck" << "Electric" << "Other");
+    int currentVehicleIndex = vehicleBox->findText(ui->vehicleTypeBox->currentText());
+    vehicleBox->setCurrentIndex(currentVehicleIndex < 0 ? 0 : currentVehicleIndex);
+    form.addRow(tr("车型"), vehicleBox);
+
+    QSpinBox *balanceSpin = new QSpinBox(&dialog);
+    balanceSpin->setRange(0, 100000);
+    balanceSpin->setValue(ui->rechargeSpin->value());
+    form.addRow(tr("初始余额"), balanceSpin);
+
+    QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, Qt::Horizontal, &dialog);
+    form.addRow(&buttons);
+    connect(&buttons, SIGNAL(accepted()), &dialog, SLOT(accept()));
+    connect(&buttons, SIGNAL(rejected()), &dialog, SLOT(reject()));
+
+    if(dialog.exec() != QDialog::Accepted)
+        return false;
+
+    info.owner = nameEdit->text().isEmpty() ? tr("Unknown") : nameEdit->text();
+    info.vehicleType = vehicleBox->currentText();
+    info.balance = balanceSpin->value();
+    info.valid = true;
+    return true;
+}
+
+//开始注册流程：暂停寻卡并写入数据
+void IEEE14443ControlWidget::startRegistrationFlow()
+{
+    registrationFlowActive = true;
+    pauseForRegistration();
+    TagInfo info;
+    if(!showRegistrationDialog(info))
+    {
+        registrationFlowActive = false;
+        requiresInitialization = false;
+        registrationAwaitingRemoval = false;
+        registrationAwaitingCardId.clear();
+        resumeAfterRegistration();
+        ui->parkingStatusLabel->setText(tr("注册已取消"));
+        return;
+    }
+    if(waitingReply)
+    {
+        registrationWritePending = true;
+        registrationPendingInfo = info;
+        registrationPendingStatusText = tr("正在注册...");
+        ui->parkingStatusLabel->setText(tr("等待当前操作完成..."));
+        return;
+    }
+    registrationVerificationPending = true;
+    refreshAfterWrite = true;
+    writeUpdatedInfo(info);
+    ui->parkingStatusLabel->setText(tr("正在注册..."));
 }
 //计算停车费用
 int IEEE14443ControlWidget::calculateFee(const QDateTime &enterTime, const QDateTime &leaveTime) const
@@ -435,6 +565,8 @@ int IEEE14443ControlWidget::calculateFee(const QDateTime &enterTime, const QDate
 //判断进出场
 void IEEE14443ControlWidget::handleParkingFlow()
 {
+    if(registrationFlowActive)
+        return;
     //检查当前卡信息
     if(currentCardId.isEmpty() || !currentInfo.valid)
         return;
@@ -576,6 +708,12 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
                 .arg(p.command(), 2, 16, QChar('0'))
                 .arg(QString(p.data().toHex()));
     QByteArray d = p.data();
+    if(d.isEmpty())
+    {
+        qDebug() << "empty payload for cmd" << p.command();
+        waitingReply = false;
+        return;
+    }
     int status = d.at(0);
     d = d.mid(1);
     waitingReply = false;
@@ -590,7 +728,14 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
             requestAntiColl();
         }
         else
+        {
             resultTipText += tr("Failure");
+            if(registrationAwaitingRemoval)
+            {
+                registrationAwaitingRemoval = false;
+                registrationAwaitingCardId.clear();
+            }
+        }
         break;
     case IEEE1443Package::AntiColl:
         resultTipText = tr("AntiColl ");
@@ -720,6 +865,15 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
         }
         break;
     }
+
+    if(registrationWritePending && !waitingReply)
+    {
+        registrationWritePending = false;
+        registrationVerificationPending = true;
+        refreshAfterWrite = true;
+        writeUpdatedInfo(registrationPendingInfo);
+        ui->parkingStatusLabel->setText(registrationPendingStatusText);
+    }
     ui->resultLabel->setText(resultTipText);
 }
 
@@ -738,22 +892,6 @@ void IEEE14443ControlWidget::on_clearDisplayBtn_clicked()
 //            delete item->widget();
 //    }
     ui->resultLabel->setText("");
-}
-//注册按钮
-void IEEE14443ControlWidget::on_registerBtn_clicked()
-{
-    //检查认证
-    if(!tagAuthenticated)
-    {
-        QMessageBox::warning(this, tr("Warning"), tr("authenticate first"));
-        return;
-    }
-    //生成待写入信息
-    TagInfo info = defaultTagInfo();
-    refreshAfterWrite = true;
-    //向卡写信息
-    writeUpdatedInfo(info);
-    ui->parkingStatusLabel->setText(tr("Registering user info"));
 }
 //充值按钮
 void IEEE14443ControlWidget::on_rechargeBtn_clicked()
