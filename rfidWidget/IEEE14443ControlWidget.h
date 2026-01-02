@@ -90,6 +90,7 @@ private:
     bool parkingFlowPaused;
     ParkingFlowState parkingFlowState;
     bool parkingExitWritePending;
+    int lastExitFee;
 
 
 private:
