@@ -108,7 +108,8 @@ bool IEEE14443ControlWidget::start(const QString &port)
         return true;
     }
     else {
-        qDebug() << "device failed to open:" << commPort->errorString();
+        qDebug() << QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
+                 << "device failed to open:" << commPort->errorString();
         delete commPort;
         commPort = NULL;
         return false;
@@ -137,7 +138,8 @@ bool IEEE14443ControlWidget::sendData(const QByteArray &data)
         //qDebug()<<"send data = "<<data.toHex();
         //qDebug()<<"rawPackage = "<<IEEE1443Package(data).toRawPackage().toHex();
         QByteArray rawPackage = IEEE1443Package(data).toRawPackage();
-        qDebug() << QString("send %1").arg(QString(rawPackage.toHex()));
+        qDebug() << QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
+                 << QString("send %1").arg(QString(rawPackage.toHex()));
         commPort->write(rawPackage);
         waitingReply = true;
     }
@@ -879,13 +881,15 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
 //    w->show();
     IEEE1443Package p(pkg);
     //qDebug()<<"the recieve pkg"<<pkg.toHex();
-    qDebug() << QString("recieve cmd=0x%1 data=%2")
+    qDebug() << QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
+             << QString("recieve cmd=0x%1 data=%2")
                 .arg(p.command(), 2, 16, QChar('0'))
                 .arg(QString(p.data().toHex()));
     QByteArray d = p.data();
     if(d.isEmpty())
     {
-        qDebug() << "empty payload for cmd" << p.command();
+        qDebug() << QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
+                 << "empty payload for cmd" << p.command();
         waitingReply = false;
         return;
     }
