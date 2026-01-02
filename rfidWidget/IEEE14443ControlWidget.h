@@ -86,6 +86,14 @@ private:
     bool registrationAwaitingRemoval;
     QString registrationAwaitingCardId;
     bool rechargePaused;
+    bool rechargeFlowActive;
+    bool rechargeVerificationPending;
+    bool rechargeWritePending;
+    QString rechargePendingStatusText;
+    TagInfo rechargePendingInfo;
+    int rechargeExpectedBalance;
+    bool rechargeAwaitingRemoval;
+    QString rechargeAwaitingCardId;
     int pendingExitFee;
     bool parkingFlowPaused;
     ParkingFlowState parkingFlowState;
@@ -119,6 +127,8 @@ private:
     void handleInvalidCard();
     bool showRegistrationDialog(TagInfo &info);
     void startRegistrationFlow();
+    bool showRechargeDialog(int &amount);
+    void startRechargeFlow(int feeRequired);
     void handleParkingFlow();
     int calculateFee(const QDateTime &enterTime, const QDateTime &leaveTime) const;
     void writeUpdatedInfo(const TagInfo &info);
