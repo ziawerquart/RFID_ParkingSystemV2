@@ -17,9 +17,6 @@ public:
 
 private:
     Ui::Widget *ui;
-
-private slots:
-    void on_pushButton_clicked();
 };
 
 #endif // WIDGET_H
