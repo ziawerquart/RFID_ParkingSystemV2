@@ -911,10 +911,10 @@ void IEEE14443ControlWidget::handleParkingFlow()
         if(currentInfo.balance < fee)
         {
             //ui提醒
-            ui->parkingStatusLabel->setText(tr("余额不足，请先充值"));
+            ui->parkingStatusLabel->setText(tr("余额不足，请先充值，最低收费金额%1").arg(fee));
             updateInfoPanel(currentInfo, enter, QDateTime());
             //进入充值流程
-            QMessageBox::warning(this, tr("出场"), tr("余额不足，请先充值"));
+            QMessageBox::warning(this, tr("出场"), tr("余额不足，请先充值，最低收费金额%1").arg(fee));
             startRechargeFlow(fee);
             return;
         }
