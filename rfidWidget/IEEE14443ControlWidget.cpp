@@ -8,6 +8,8 @@
 #include <QDebug>
 #include <QDateTime>
 #include <QLabel>
+#include <QHeaderView>
+#include <QTreeWidgetItem>
 //#include <ioportManager.h>
 #include<rfidWidget/ioportManager.h>
 
@@ -70,6 +72,9 @@ IEEE14443ControlWidget::IEEE14443ControlWidget(QWidget *parent) :
     ui->authKeyEdit->setHighlighting(false);
     ui->authKeyEdit->setBytesperLine(6);
     ui->authKeyEdit->setData(defAuthKey);
+    ui->inParkTree->setExpandsOnDoubleClick(true);
+    ui->inParkTree->setItemsExpandable(true);
+    ui->inParkTree->header()->setStretchLastSection(true);
 
     //收到包信号和处理包信息号
     connect(this, SIGNAL(recvPackage(QByteArray)), this, SLOT(onRecvedPackage(QByteArray)));
@@ -234,8 +239,10 @@ void IEEE14443ControlWidget::resetStatus()
     lastEntryTimeMap.clear();
     lastExitTimeMap.clear();
     entryTimeMap.clear();
+    inParkInfoMap.clear();
     recentReplyTimestamps.clear();
     updateInfoPanel(TagInfo(), QDateTime(), QDateTime());
+    updateInParkVehicleList();
 }
 
 void IEEE14443ControlWidget::startReplyTimeout(quint8 command)
@@ -518,6 +525,37 @@ void IEEE14443ControlWidget::updateInfoPanel(const TagInfo &info, const QDateTim
     else
         ui->infoBalanceValue->setText(tr("--"));
 }
+
+void IEEE14443ControlWidget::updateInParkVehicleList()
+{
+    ui->inParkTree->clear();
+    QMap<QString, QDateTime>::const_iterator it = entryTimeMap.constBegin();
+    for(; it != entryTimeMap.constEnd(); ++it)
+    {
+        const QString cardId = it.key();
+        const QDateTime entryTime = it.value();
+        TagInfo info = inParkInfoMap.value(cardId);
+        const QString ownerName = info.valid ? info.owner : tr("N/A");
+        const QString vehicleType = info.valid ? info.vehicleType : tr("N/A");
+        const QString balanceText = info.valid ? QString::number(info.balance) : tr("--");
+        const QString entryText = entryTime.isValid() ? entryTime.toString("yyyy-MM-dd hh:mm:ss") : tr("--");
+
+        QTreeWidgetItem *summaryItem = new QTreeWidgetItem(ui->inParkTree);
+        summaryItem->setText(0, cardId.toUpper());
+        summaryItem->setText(1, ownerName);
+
+        QTreeWidgetItem *detailItem = new QTreeWidgetItem(summaryItem);
+        QString detailText = tr("卡号: %1  车主姓名: %2  车型: %3  入场时间: %4  余额: %5")
+                                 .arg(cardId.toUpper())
+                                 .arg(ownerName)
+                                 .arg(vehicleType)
+                                 .arg(entryText)
+                                 .arg(balanceText);
+        detailItem->setText(0, detailText);
+        ui->inParkTree->setFirstColumnSpanned(detailItem, true);
+    }
+    ui->inParkTree->expandToDepth(0);
+}
 //生成待写入info
 IEEE14443ControlWidget::TagInfo IEEE14443ControlWidget::defaultTagInfo() const
 {
@@ -564,6 +602,11 @@ void IEEE14443ControlWidget::ensureInitialized()
                                          lastEntryTimeMap.value(currentCardId);
             updateInfoPanel(info, entryDisplayTime, lastExitTimeMap.value(currentCardId));
             currentInfo = info;
+            if(entryTimeMap.contains(currentCardId))
+            {
+                inParkInfoMap.insert(currentCardId, info);
+                updateInParkVehicleList();
+            }
             if(info.balance == rechargeExpectedBalance)
             {
                 ui->parkingStatusLabel->setText(tr("充值成功，余额为%1").arg(info.balance));
@@ -611,6 +654,11 @@ void IEEE14443ControlWidget::ensureInitialized()
                                      entryTimeMap.value(currentCardId) :
                                      lastEntryTimeMap.value(currentCardId);
         updateInfoPanel(info, entryDisplayTime, lastExitTimeMap.value(currentCardId));
+        if(entryTimeMap.contains(currentCardId))
+        {
+            inParkInfoMap.insert(currentCardId, info);
+            updateInParkVehicleList();
+        }
         //进行出入场逻辑（注册流程不进行出入场判断）
         if(!registrationFlowActive)
             handleParkingFlow();
@@ -625,6 +673,8 @@ void IEEE14443ControlWidget::handleInvalidCard()
     //清理停车状态
     entryTimeMap.remove(currentCardId);
     lastEntryTimeMap.remove(currentCardId);
+    inParkInfoMap.remove(currentCardId);
+    updateInParkVehicleList();
 
     //注册写卡后验证失败
     if(registrationVerificationPending)
@@ -836,6 +886,8 @@ void IEEE14443ControlWidget::handleParkingFlow()
         ui->parkingStatusLabel->setText(tr("Card not initialized, please register"));
         entryTimeMap.remove(currentCardId);
         lastEntryTimeMap.remove(currentCardId);
+        inParkInfoMap.remove(currentCardId);
+        updateInParkVehicleList();
         return;
     }
     //记录当前时间
@@ -868,6 +920,8 @@ void IEEE14443ControlWidget::handleParkingFlow()
 
         //移除入场时间信息
         entryTimeMap.remove(currentCardId);
+        inParkInfoMap.remove(currentCardId);
+        updateInParkVehicleList();
         //更新最近出场信息
         lastExitTimeMap.insert(currentCardId, now);
         //更新最近入场信息
@@ -897,6 +951,8 @@ void IEEE14443ControlWidget::handleParkingFlow()
         }
         entryTimeMap.insert(currentCardId, now);
         lastEntryTimeMap.insert(currentCardId, now);
+        inParkInfoMap.insert(currentCardId, currentInfo);
+        updateInParkVehicleList();
         pendingExitFee = 0;
         updateInfoPanel(currentInfo, now, QDateTime());
         QMessageBox::information(this, tr("入场"), tr("入场成功，请收卡"));
@@ -1176,6 +1232,11 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
                             entryTimeMap.value(currentCardId) ://当前入场时间
                             lastEntryTimeMap.value(currentCardId);//最近入场时间
                     updateInfoPanel(pendingWriteInfo, entryDisplayTime, lastExitTimeMap.value(currentCardId));
+                    if(entryTimeMap.contains(currentCardId))
+                    {
+                        inParkInfoMap.insert(currentCardId, pendingWriteInfo);
+                        updateInParkVehicleList();
+                    }
                 }
 
                 if(rechargePaused && !rechargeVerificationPending)

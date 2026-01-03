@@ -103,7 +103,7 @@
     </widget>
    </item>
    <item>
-    <widget class="QGroupBox" name="infoDisplayGroupBox">
+   <widget class="QGroupBox" name="infoDisplayGroupBox">
      <property name="title">
       <string>信息显示</string>
      </property>
@@ -176,6 +176,41 @@
         <property name="text">
          <string>--</string>
         </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="inParkGroupBox">
+     <property name="title">
+      <string>在场车辆</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_inPark">
+      <item>
+       <widget class="QTreeWidget" name="inParkTree">
+        <property name="alternatingRowColors">
+         <bool>true</bool>
+        </property>
+        <property name="rootIsDecorated">
+         <bool>true</bool>
+        </property>
+        <property name="headerVisible">
+         <bool>true</bool>
+        </property>
+        <property name="columnCount">
+         <number>2</number>
+        </property>
+        <column>
+         <property name="text">
+          <string>卡号</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>车主姓名</string>
+         </property>
+        </column>
        </widget>
       </item>
      </layout>
