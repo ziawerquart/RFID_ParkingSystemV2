@@ -182,6 +182,50 @@
     </widget>
    </item>
    <item>
+    <widget class="QGroupBox" name="parkingListGroupBox">
+     <property name="title">
+      <string>在场车辆清单</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_3">
+      <item>
+       <widget class="QTableWidget" name="parkingTable">
+        <property name="rowCount">
+         <number>0</number>
+        </property>
+        <property name="columnCount">
+         <number>5</number>
+        </property>
+        <column>
+         <property name="text">
+          <string>卡号</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>车主姓名</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>车型</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>入场时间</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>余额</string>
+         </property>
+        </column>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
     <widget class="QGroupBox" name="groupBox">
      <property name="title">
       <string>IEEE1443 Control Page</string>

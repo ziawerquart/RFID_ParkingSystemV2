@@ -14,6 +14,7 @@
 #include <QSpinBox>
 #include <QComboBox>
 #include <QHash>
+#include <QTableWidgetItem>
 
 namespace Ui {
     class IEEE14443ControlWidget;
@@ -85,6 +86,7 @@ private:
     QMap<QString, QDateTime> entryTimeMap;
     QMap<QString, QDateTime> lastEntryTimeMap;
     QMap<QString, QDateTime> lastExitTimeMap;
+    QMap<QString, TagInfo> activeInfoMap;
     bool requiresInitialization;
     bool refreshAfterWrite;
     bool registrationPaused;
@@ -132,6 +134,7 @@ private:
     void encodeTagInfo(const TagInfo &info, QByteArray &b1, QByteArray &b2);
     void updateInfoDisplay(const TagInfo &info);
     void updateInfoPanel(const TagInfo &info, const QDateTime &entryTime, const QDateTime &exitTime);
+    void updateParkingTable();
     TagInfo defaultTagInfo() const;
     void ensureInitialized();
     void handleInvalidCard();
