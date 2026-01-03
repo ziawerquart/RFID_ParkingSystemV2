@@ -8,6 +8,7 @@
 #include <QDebug>
 #include <QDateTime>
 #include <QLabel>
+#include <QPushButton>
 #include <QHeaderView>
 #include <QAbstractItemView>
 //#include <ioportManager.h>
