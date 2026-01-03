@@ -19,6 +19,8 @@ namespace Ui {
     class IEEE14443ControlWidget;
 }
 
+class IEEE1443Package;
+
 class IEEE14443ControlWidget : public QWidget
 {
     Q_OBJECT
