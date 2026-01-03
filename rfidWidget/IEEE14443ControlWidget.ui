@@ -195,8 +195,8 @@
         <property name="rootIsDecorated">
          <bool>true</bool>
         </property>
-        <property name="headerVisible">
-         <bool>true</bool>
+        <property name="headerHidden">
+         <bool>false</bool>
         </property>
         <property name="columnCount">
          <number>2</number>

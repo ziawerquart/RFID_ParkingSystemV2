@@ -552,7 +552,8 @@ void IEEE14443ControlWidget::updateInParkVehicleList()
                                  .arg(entryText)
                                  .arg(balanceText);
         detailItem->setText(0, detailText);
-        ui->inParkTree->setFirstColumnSpanned(detailItem, true);
+        int detailRow = summaryItem->indexOfChild(detailItem);
+        ui->inParkTree->setFirstColumnSpanned(detailRow, summaryItem, true);
     }
     ui->inParkTree->expandToDepth(0);
 }
