@@ -13,6 +13,7 @@
 #include <QLineEdit>
 #include <QSpinBox>
 #include <QComboBox>
+#include <QHash>
 
 namespace Ui {
     class IEEE14443ControlWidget;
@@ -66,6 +67,10 @@ private:
     QByteArray lastRecvPackage;
     bool waitingReply;//自动寻卡——是否等回复
     int pendingCommand;//自动寻卡——等待回包的命令
+    int pendingRetries;
+    int maxReplyRetries;
+    int replyTimeoutMs;
+    QHash<QString, QDateTime> recentReplyTimestamps;
     bool autoSearchInProgress;//自动寻卡——完整流程中
     QString currentCardId;//自动寻卡——当前识别到的ID
     bool tagAuthenticated;//自动寻卡——是否认证成功
@@ -135,6 +140,10 @@ private:
     void handleParkingFlow();
     int calculateFee(const QDateTime &enterTime, const QDateTime &leaveTime) const;
     void writeUpdatedInfo(const TagInfo &info);
+    void startReplyTimeout(quint8 command);
+    void handleReplyTimeoutFailure(int command);
+    bool isDuplicateResponse(const IEEE1443Package &pkg);
+    void pruneRecentReplies();
 
 private slots:
     void on_pushButton_clicked();
