@@ -29,6 +29,9 @@ IEEE14443ControlWidget::IEEE14443ControlWidget(QWidget *parent) :
     recvStatus(0),
     waitingReply(false),
     pendingCommand(-1),
+    pendingRetries(0),
+    maxReplyRetries(2),
+    replyTimeoutMs(400),
     autoSearchInProgress(false),
     tagAuthenticated(false),
     pendingReadBlock(-1),
@@ -79,7 +82,7 @@ IEEE14443ControlWidget::IEEE14443ControlWidget(QWidget *parent) :
     connect(autoSearchTimer, SIGNAL(timeout()), this, SLOT(onAutoSearchTimeout()));
     //等待回包超时定时器
     replyTimeoutTimer = new QTimer(this);
-    replyTimeoutTimer->setInterval(250);
+    replyTimeoutTimer->setInterval(replyTimeoutMs);
     replyTimeoutTimer->setSingleShot(true);
     connect(replyTimeoutTimer, SIGNAL(timeout()), this, SLOT(onReplyTimeout()));
     resetStatus();
@@ -136,6 +139,7 @@ bool IEEE14443ControlWidget::stop()
         replyTimeoutTimer->stop();
     waitingReply = false;
     pendingCommand = -1;
+    pendingRetries = 0;
     autoSearchInProgress = false;
     stopAutoSearch();
     return true;
@@ -160,6 +164,9 @@ bool IEEE14443ControlWidget::sendData(const QByteArray &data)
             pendingCommand = pkg.command();
         else
             pendingCommand = -1;
+        pendingRetries = 0;
+        if(pkg.isValid())
+            startReplyTimeout(pkg.command());
     }
     return true;
 }
@@ -189,6 +196,7 @@ void IEEE14443ControlWidget::resetStatus()
     ui->parkingStatusLabel->setText("");
     waitingReply = false;
     pendingCommand = -1;
+    pendingRetries = 0;
     autoSearchInProgress = false;
     if(replyTimeoutTimer)
         replyTimeoutTimer->stop();
@@ -226,7 +234,74 @@ void IEEE14443ControlWidget::resetStatus()
     lastEntryTimeMap.clear();
     lastExitTimeMap.clear();
     entryTimeMap.clear();
+    recentReplyTimestamps.clear();
     updateInfoPanel(TagInfo(), QDateTime(), QDateTime());
+}
+
+void IEEE14443ControlWidget::startReplyTimeout(quint8 command)
+{
+    Q_UNUSED(command);
+    if(!replyTimeoutTimer)
+        return;
+    replyTimeoutTimer->setInterval(replyTimeoutMs);
+    replyTimeoutTimer->start();
+}
+
+void IEEE14443ControlWidget::handleReplyTimeoutFailure(int command)
+{
+    if(command == IEEE1443Package::SearchCard)
+    {
+        if(registrationAwaitingRemoval)
+        {
+            registrationAwaitingRemoval = false;
+            registrationAwaitingCardId.clear();
+        }
+        if(rechargeAwaitingRemoval)
+        {
+            rechargeAwaitingRemoval = false;
+            rechargeAwaitingCardId.clear();
+        }
+        currentCardId.clear();
+        tagAuthenticated = false;
+        ui->resultLabel->setText(tr("Search Card Failure"));
+        return;
+    }
+
+    if(command == IEEE1443Package::ReadCard)
+        pendingReadBlock = -1;
+    if(command == IEEE1443Package::WriteCard)
+        pendingWriteBlock = -1;
+    refreshAfterWrite = false;
+    ui->resultLabel->setText(tr("Command Timeout"));
+}
+
+bool IEEE14443ControlWidget::isDuplicateResponse(const IEEE1443Package &pkg)
+{
+    const int kDuplicateWindowMs = 800;
+    QString signature = QString::number(pkg.command()) + ":" + QString(pkg.data().toHex());
+    QDateTime now = QDateTime::currentDateTime();
+    if(recentReplyTimestamps.contains(signature))
+    {
+        if(recentReplyTimestamps.value(signature).msecsTo(now) <= kDuplicateWindowMs)
+            return true;
+    }
+    recentReplyTimestamps.insert(signature, now);
+    pruneRecentReplies();
+    return false;
+}
+
+void IEEE14443ControlWidget::pruneRecentReplies()
+{
+    const int kKeepWindowMs = 3000;
+    QDateTime now = QDateTime::currentDateTime();
+    QHash<QString, QDateTime>::iterator it = recentReplyTimestamps.begin();
+    while(it != recentReplyTimestamps.end())
+    {
+        if(it.value().msecsTo(now) > kKeepWindowMs)
+            it = recentReplyTimestamps.erase(it);
+        else
+            ++it;
+    }
 }
 
 //自动寻卡控制========================================================
@@ -907,10 +982,13 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
     IEEE1443Package p(pkg);
     if(!p.isValid())
         return;
+    if(!waitingReply && pendingCommand < 0)
+        return;
     if(waitingReply && pendingCommand >= 0 && p.command() != pendingCommand)
         return;
-    if(replyTimeoutTimer && replyTimeoutTimer->isActive()
-            && p.command() == IEEE1443Package::SearchCard)
+    if(isDuplicateResponse(p))
+        return;
+    if(replyTimeoutTimer && replyTimeoutTimer->isActive())
         replyTimeoutTimer->stop();
     //qDebug()<<"the recieve pkg"<<pkg.toHex();
     qDebug() << QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
@@ -931,6 +1009,7 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
     d = d.mid(1);
     waitingReply = false;
     pendingCommand = -1;
+    pendingRetries = 0;
     QString resultTipText;
     switch(p.command())
     {
@@ -1201,27 +1280,24 @@ void IEEE14443ControlWidget::onAutoSearchTimeout()
 
 void IEEE14443ControlWidget::onReplyTimeout()
 {
-    if(!waitingReply || pendingCommand != IEEE1443Package::SearchCard)
+    if(!waitingReply || pendingCommand < 0)
         return;
+    if(pendingRetries < maxReplyRetries)
+    {
+        pendingRetries++;
+        IEEE1443Package retryPackage(lastSendPackage);
+        if(retryPackage.isValid() && commPort)
+        {
+            commPort->write(retryPackage.toRawPackage());
+            startReplyTimeout(pendingCommand);
+            return;
+        }
+    }
+    int failedCommand = pendingCommand;
     waitingReply = false;
     pendingCommand = -1;
     autoSearchInProgress = false;
-    IEEE1443Package p(lastSendPackage);
-    if(!p.isValid() || p.command() != IEEE1443Package::SearchCard)
-        return;
-    if(registrationAwaitingRemoval)
-    {
-        registrationAwaitingRemoval = false;
-        registrationAwaitingCardId.clear();
-    }
-    if(rechargeAwaitingRemoval)
-    {
-        rechargeAwaitingRemoval = false;
-        rechargeAwaitingCardId.clear();
-    }
-    currentCardId.clear();
-    tagAuthenticated = false;
-    ui->resultLabel->setText(tr("Search Card Failure"));
+    handleReplyTimeoutFailure(failedCommand);
 }
 
 //寻卡按钮
