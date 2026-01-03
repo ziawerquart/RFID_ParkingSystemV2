@@ -111,11 +111,11 @@ private:
     ParkingFlowState parkingFlowState;
     bool parkingExitWritePending;
     int lastExitFee;
+    QByteArray authKeyData;
 
 
 private:
     bool sendData(const QByteArray &data);
-    void resetBlockList(int min, int max, int secSize);
     void resetStatus();
     void startAutoSearch();
     void stopAutoSearch();
@@ -151,14 +151,6 @@ private:
     void pruneRecentReplies();
 
 private slots:
-    void on_pushButton_clicked();
-    void on_writeBtn_clicked();
-    void on_readBtn_clicked();
-    void on_authCheckBtn_clicked();
-    void on_selCardBtn_clicked();
-    void on_getIdBtn_clicked();
-    void on_searchCardBtn_clicked();
-    void on_clearDisplayBtn_clicked();
     void onPortDataReady();
     void onRecvedPackage(QByteArray pkg);
     void onStatusListScrollRangeChanced(int min, int max);

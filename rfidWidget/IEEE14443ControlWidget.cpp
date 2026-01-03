@@ -59,11 +59,10 @@ IEEE14443ControlWidget::IEEE14443ControlWidget(QWidget *parent) :
     parkingFlowPaused(false),
     parkingFlowState(ParkingFlowIdle),
     parkingExitWritePending(false),
-    lastExitFee(0)
+    lastExitFee(0),
+    authKeyData(6, static_cast<char>(0xFF))
 {
     ui->setupUi(this);
-    ui->dataEdit->setOverwriteMode(true);
-    ui->dataEdit->setAddressArea(false);
     if(ui->parkingTable)
     {
         ui->parkingTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -74,14 +73,6 @@ IEEE14443ControlWidget::IEEE14443ControlWidget(QWidget *parent) :
         if(header)
             header->setResizeMode(QHeaderView::Stretch);
     }
-
-    QByteArray defAuthKey(6, 0xFF);
-    ui->authKeyEdit->setOverwriteMode(true);
-    ui->authKeyEdit->setAddressArea(false);
-    ui->authKeyEdit->setAsciiArea(false);
-    ui->authKeyEdit->setHighlighting(false);
-    ui->authKeyEdit->setBytesperLine(6);
-    ui->authKeyEdit->setData(defAuthKey);
 
     //收到包信号和处理包信息号
     connect(this, SIGNAL(recvPackage(QByteArray)), this, SLOT(onRecvedPackage(QByteArray)));
@@ -183,26 +174,9 @@ bool IEEE14443ControlWidget::sendData(const QByteArray &data)
     return true;
 }
 
-void IEEE14443ControlWidget::resetBlockList(int min, int max, int secSize)
-{
-    ui->blockNumberBox->clear();
-    int i;
-    for(i = 0; i <= max; i++)
-    {
-        if((i % secSize) == (secSize - 1))
-            continue;
-        ui->blockNumberBox->addItem(QString::number(i));
-    }
-}
-
 void IEEE14443ControlWidget::resetStatus()
 {
-    ui->s50CardBtn->setChecked(false);
-    ui->s70CardBtn->setChecked(false);
     ui->selCardIdEdit->setText("");
-    QByteArray empty(16, 0x00);
-    ui->dataEdit->setData(empty);
-    resetBlockList(1, 63, 4);
     ui->resultLabel->setText("");
     ui->balanceEdit->setText("");
     ui->parkingStatusLabel->setText("");
@@ -403,7 +377,7 @@ void IEEE14443ControlWidget::requestAuth(quint8 blockNumber)
     QByteArray authInfo;
     authInfo.append(0x60);
     authInfo.append((char)blockNumber);
-    authInfo.append(ui->authKeyEdit->data());
+    authInfo.append(authKeyData);
     if(authInfo.size() != 8)
     {
         QMessageBox::warning(this, tr("Warning"), tr("auth key error"));
@@ -1120,18 +1094,6 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
         {
             resultTipText += tr("Succeed");
             resultTipText += tr(", Type is %1").arg(d.at(0) == 0x08 ? "S50" : "S70");
-            if(d.at(0) == 0x08) // S50
-            {
-                ui->s50CardBtn->setChecked(true);
-                ui->s70CardBtn->setChecked(false);
-                resetBlockList(1, 63, 4);
-            }
-            else
-            {
-                ui->s50CardBtn->setChecked(false);
-                ui->s70CardBtn->setChecked(true);
-                resetBlockList(1, 255, 4);
-            }
             tagAuthenticated = false;
             //停车系统实现自动识别卡片功能，自动进行认证
             requestAuth(kUserBlock1);
@@ -1161,8 +1123,6 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
             resultTipText += tr("Succeed");
             // 读卡指令的响应, 可以获得卡内数据
             // 读取正常
-            ui->dataEdit->setData(d);
-
             if(pendingReadBlock == kUserBlock1)//待读块1
             {
                 lastBlock1 = d;
@@ -1319,17 +1279,6 @@ void IEEE14443ControlWidget::onStatusListScrollRangeChanced(int min, int max)
 //    ui->statusList->verticalScrollBar()->setValue(max);
 }
 
-void IEEE14443ControlWidget::on_clearDisplayBtn_clicked()
-{
-//    while(ui->statusListLayout->count())
-//    {
-//        QLayoutItem *item = ui->statusListLayout->itemAt(0);
-//        ui->statusListLayout->removeItem(item);
-//        if(item->widget())
-//            delete item->widget();
-//    }
-    ui->resultLabel->setText("");
-}
 //处理timeout信号
 void IEEE14443ControlWidget::onAutoSearchTimeout()
 {
@@ -1362,114 +1311,20 @@ void IEEE14443ControlWidget::onReplyTimeout()
     handleReplyTimeoutFailure(failedCommand);
 }
 
-//寻卡按钮
-void IEEE14443ControlWidget::on_searchCardBtn_clicked()
-{
-
-
-        resetStatus();
-        requestSearch();
-
-}
-//getID按钮
-void IEEE14443ControlWidget::on_getIdBtn_clicked()
-{
-    lastSendPackage = IEEE1443Package(0, 0x47, 0x04).toPurePackage();
-    sendData(lastSendPackage);
-}
-//selectID按钮
-void IEEE14443ControlWidget::on_selCardBtn_clicked()
-{
-    if(ui->selCardIdEdit->text().length() != 8)
-    {
-        QMessageBox::warning(this, tr("Warning"), tr("card id error"));
-        return;
-    }
-    QByteArray cardId = QByteArray::fromHex(ui->selCardIdEdit->text().toAscii());
-    IEEE1443Package pkg(0, 0x48, cardId);
-    lastSendPackage = pkg.toPurePackage();
-    sendData(lastSendPackage);
-}
-//认证按钮
-void IEEE14443ControlWidget::on_authCheckBtn_clicked()
-{
-    if(ui->selCardIdEdit->text().length() != 8)
-    {
-        QMessageBox::warning(this, tr("Warning"), tr("card id error"));
-        return;
-    }
-//    if(ui->authKeyEdit->text().length() != 12)
-//    {
-//        QMessageBox::warning(this, tr("Warning"), tr("auth key error"));
-//        return;
-//    }
-    QByteArray authInfo;
-    authInfo.append(0x60);      // Always use Type A
-    authInfo.append((char)(ui->blockNumberBox->currentText().toLong()));
-    authInfo.append(ui->authKeyEdit->data());
-    if(authInfo.size() != 8)
-    {
-        QMessageBox::warning(this, tr("Warning"), tr("auth key error"));
-        return;
-    }
-    IEEE1443Package pkg(0, 0x4A, authInfo);
-    lastSendPackage = pkg.toPurePackage();
-    sendData(lastSendPackage);
-}
-//读按钮
-void IEEE14443ControlWidget::on_readBtn_clicked()
-{
-    IEEE1443Package pkg(0, 0x4B, (char)ui->blockNumberBox->currentText().toLong());
-    lastSendPackage = pkg.toPurePackage();
-    sendData(lastSendPackage);
-}
-//写按钮
-void IEEE14443ControlWidget::on_writeBtn_clicked()
-{
-    QByteArray writeInfo;
-    writeInfo.append((char)ui->blockNumberBox->currentText().toLong());
-    writeInfo.append(ui->dataEdit->data());
-    if(writeInfo.size() != 17)
-    {
-        QMessageBox::warning(this, tr("Warning"), tr("write data error"));
-        return;
-    }
-    IEEE1443Package pkg(0, IEEE1443Package::WriteCard, writeInfo);
-    lastSendPackage = pkg.toPurePackage();
-    sendData(lastSendPackage);
-}
-
-void IEEE14443ControlWidget::on_pushButton_clicked()
-{
-    if(ui->pushButton->text() == tr("BegainSearch"))
-    {
-        //qDebug()<<"set mode success";
-        IOPortManager::setMode(Mode13_56M1);
-        this->start("/dev/ttyS0");
-        ui->pushButton->setText(tr("Stop"));
-    }
-    else
-    {
-        this->stop();
-        ui->pushButton->setText(tr("BegainSearch"));
-    }
-}
 void IEEE14443ControlWidget::showEvent(QShowEvent *)
 {
-    if(ui->pushButton->text() == tr("BegainSearch"))
+    if(!commPort)
     {
         //qDebug()<<"set mode success";
         IOPortManager::setMode(Mode13_56M1);
         this->start("/dev/ttyS0");
-        ui->pushButton->setText(tr("Stop"));
     }
 }
 void IEEE14443ControlWidget::hideEvent(QHideEvent *)
 {
-    if(ui->pushButton->text() != tr("BegainSearch"))
+    if(commPort)
     {
         this->stop();
-        ui->pushButton->setText(tr("BegainSearch"));
     }
 }
 static IEEE14443ControlWidget *ieee14443ControlWidget;

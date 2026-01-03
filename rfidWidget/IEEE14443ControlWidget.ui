@@ -226,277 +226,54 @@
     </widget>
    </item>
    <item>
-    <widget class="QGroupBox" name="groupBox">
+    <widget class="QGroupBox" name="deviceStatusGroupBox">
      <property name="title">
-      <string>IEEE1443 Control Page</string>
+      <string>设备状态</string>
      </property>
-     <layout class="QVBoxLayout" name="verticalLayout_6" stretch="0,0,0,0">
-      <item>
-       <layout class="QHBoxLayout" name="horizontalLayout">
-        <item>
-         <widget class="QPushButton" name="searchCardBtn">
-          <property name="text">
-           <string>&amp;1.Search</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QPushButton" name="getIdBtn">
-          <property name="text">
-           <string>&amp;2.Get ID</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QPushButton" name="selCardBtn">
-          <property name="text">
-           <string>&amp;3.Select Card</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QPushButton" name="authCheckBtn">
-          <property name="text">
-           <string>&amp;4.Auth Check</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QPushButton" name="readBtn">
-          <property name="text">
-           <string>&amp;5.Read</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QPushButton" name="writeBtn">
-          <property name="text">
-           <string>&amp;6.Write</string>
-          </property>
-         </widget>
-        </item>
-       </layout>
-      </item>
-      <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_6">
-        <item>
-         <widget class="QLabel" name="label_2">
-          <property name="text">
-           <string>Card ID:</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QLineEdit" name="selCardIdEdit">
-          <property name="font">
-           <font>
-            <family>黑体</family>
-            <pointsize>12</pointsize>
-           </font>
-          </property>
-          <property name="styleSheet">
-           <string notr="true">color: rgb(255, 0, 0);</string>
-          </property>
-          <property name="readOnly">
-           <bool>true</bool>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QLabel" name="label_3">
-          <property name="text">
-           <string>Type:</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QWidget" name="typeWidget" native="true">
-          <layout class="QHBoxLayout" name="horizontalLayout_4">
-           <property name="margin">
-            <number>0</number>
-           </property>
-           <item>
-            <widget class="QRadioButton" name="s50CardBtn">
-             <property name="enabled">
-              <bool>false</bool>
-             </property>
-             <property name="text">
-              <string>S50</string>
-             </property>
-             <property name="checked">
-              <bool>false</bool>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QRadioButton" name="s70CardBtn">
-             <property name="enabled">
-              <bool>false</bool>
-             </property>
-             <property name="text">
-              <string>S70</string>
-             </property>
-             <property name="checked">
-              <bool>true</bool>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </widget>
-        </item>
-       </layout>
-      </item>
-      <item>
-       <widget class="QGroupBox" name="groupBox_4">
-        <property name="title">
-         <string>Read &amp;&amp; Write</string>
+     <layout class="QGridLayout" name="gridLayout_deviceStatus">
+      <item row="0" column="0">
+       <widget class="QLabel" name="label_cardId">
+        <property name="text">
+         <string>Card ID:</string>
         </property>
-        <layout class="QVBoxLayout" name="verticalLayout_5">
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayout_8" stretch="0,0,0,0,10">
-           <item>
-            <widget class="QLabel" name="label_6">
-             <property name="text">
-              <string>Block Number:</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QWidget" name="authTypeWidget" native="true">
-             <layout class="QHBoxLayout" name="horizontalLayout_5">
-              <property name="margin">
-               <number>0</number>
-              </property>
-             </layout>
-            </widget>
-           </item>
-           <item>
-            <widget class="QComboBox" name="blockNumberBox"/>
-           </item>
-           <item>
-            <widget class="QLabel" name="label_4">
-             <property name="text">
-              <string>Auth Key:</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QHexEdit" name="authKeyEdit" native="true">
-             <property name="maximumSize">
-              <size>
-               <width>16777215</width>
-               <height>24</height>
-              </size>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </item>
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayout_7" stretch="0,0">
-           <item>
-            <widget class="QLabel" name="label_7">
-             <property name="text">
-              <string>Data:</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <spacer name="horizontalSpacer_2">
-             <property name="orientation">
-              <enum>Qt::Horizontal</enum>
-             </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>40</width>
-               <height>20</height>
-              </size>
-             </property>
-            </spacer>
-           </item>
-          </layout>
-         </item>
-         <item>
-          <widget class="QHexEdit" name="dataEdit" native="true">
-           <property name="maximumSize">
-            <size>
-             <width>16777215</width>
-             <height>24</height>
-            </size>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLabel" name="resultLabel">
-           <property name="font">
-            <font>
-             <pointsize>12</pointsize>
-            </font>
-           </property>
-           <property name="styleSheet">
-            <string notr="true">color: rgb(255, 0, 0);</string>
-           </property>
-           <property name="text">
-            <string/>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayout_3"/>
-         </item>
-        </layout>
        </widget>
       </item>
-      <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_2">
-        <item>
-         <spacer name="horizontalSpacer">
-          <property name="orientation">
-           <enum>Qt::Horizontal</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>40</width>
-            <height>20</height>
-           </size>
-          </property>
-         </spacer>
-        </item>
-        <item>
-         <widget class="QPushButton" name="pushButton">
-          <property name="text">
-           <string>BegainSearch</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <spacer name="horizontalSpacer_3">
-          <property name="orientation">
-           <enum>Qt::Horizontal</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>40</width>
-            <height>20</height>
-           </size>
-          </property>
-         </spacer>
-        </item>
-       </layout>
+      <item row="0" column="1">
+       <widget class="QLineEdit" name="selCardIdEdit">
+        <property name="font">
+         <font>
+          <family>黑体</family>
+          <pointsize>12</pointsize>
+         </font>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">color: rgb(255, 0, 0);</string>
+        </property>
+        <property name="readOnly">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0" colspan="2">
+       <widget class="QLabel" name="resultLabel">
+        <property name="font">
+         <font>
+          <pointsize>12</pointsize>
+         </font>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">color: rgb(255, 0, 0);</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
       </item>
      </layout>
     </widget>
    </item>
   </layout>
  </widget>
- <customwidgets>
-  <customwidget>
-   <class>QHexEdit</class>
-   <extends>QWidget</extends>
-   <header>rfidWidget/qhexedit.h</header>
-   <container>1</container>
-  </customwidget>
- </customwidgets>
  <resources/>
  <connections/>
 </ui>
