@@ -8,6 +8,8 @@
 #include <QDebug>
 #include <QDateTime>
 #include <QLabel>
+#include <QHeaderView>
+#include <QAbstractItemView>
 //#include <ioportManager.h>
 #include<rfidWidget/ioportManager.h>
 
@@ -62,6 +64,16 @@ IEEE14443ControlWidget::IEEE14443ControlWidget(QWidget *parent) :
     ui->setupUi(this);
     ui->dataEdit->setOverwriteMode(true);
     ui->dataEdit->setAddressArea(false);
+    if(ui->parkingTable)
+    {
+        ui->parkingTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+        ui->parkingTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+        ui->parkingTable->setSelectionMode(QAbstractItemView::SingleSelection);
+        ui->parkingTable->setAlternatingRowColors(true);
+        QHeaderView *header = ui->parkingTable->horizontalHeader();
+        if(header)
+            header->setResizeMode(QHeaderView::Stretch);
+    }
 
     QByteArray defAuthKey(6, 0xFF);
     ui->authKeyEdit->setOverwriteMode(true);
@@ -234,8 +246,10 @@ void IEEE14443ControlWidget::resetStatus()
     lastEntryTimeMap.clear();
     lastExitTimeMap.clear();
     entryTimeMap.clear();
+    activeInfoMap.clear();
     recentReplyTimestamps.clear();
     updateInfoPanel(TagInfo(), QDateTime(), QDateTime());
+    updateParkingTable();
 }
 
 void IEEE14443ControlWidget::startReplyTimeout(quint8 command)
@@ -518,6 +532,38 @@ void IEEE14443ControlWidget::updateInfoPanel(const TagInfo &info, const QDateTim
     else
         ui->infoBalanceValue->setText(tr("--"));
 }
+
+void IEEE14443ControlWidget::updateParkingTable()
+{
+    if(!ui->parkingTable)
+        return;
+    ui->parkingTable->setRowCount(entryTimeMap.size());
+    int row = 0;
+    QMap<QString, QDateTime>::const_iterator it = entryTimeMap.constBegin();
+    for(; it != entryTimeMap.constEnd(); ++it, ++row)
+    {
+        const QString cardId = it.key();
+        const QDateTime entryTime = it.value();
+        TagInfo info;
+        if(activeInfoMap.contains(cardId))
+            info = activeInfoMap.value(cardId);
+
+        QTableWidgetItem *cardItem = new QTableWidgetItem(cardId);
+        QTableWidgetItem *ownerItem = new QTableWidgetItem(info.valid ? info.owner : tr("--"));
+        QTableWidgetItem *vehicleItem = new QTableWidgetItem(info.valid ? info.vehicleType : tr("--"));
+        QTableWidgetItem *entryItem = new QTableWidgetItem(entryTime.isValid()
+                                                           ? entryTime.toString("yyyy-MM-dd hh:mm:ss")
+                                                           : tr("--"));
+        QTableWidgetItem *balanceItem = new QTableWidgetItem(info.valid
+                                                             ? QString::number(info.balance)
+                                                             : tr("--"));
+        ui->parkingTable->setItem(row, 0, cardItem);
+        ui->parkingTable->setItem(row, 1, ownerItem);
+        ui->parkingTable->setItem(row, 2, vehicleItem);
+        ui->parkingTable->setItem(row, 3, entryItem);
+        ui->parkingTable->setItem(row, 4, balanceItem);
+    }
+}
 //生成待写入info
 IEEE14443ControlWidget::TagInfo IEEE14443ControlWidget::defaultTagInfo() const
 {
@@ -611,6 +657,11 @@ void IEEE14443ControlWidget::ensureInitialized()
                                      entryTimeMap.value(currentCardId) :
                                      lastEntryTimeMap.value(currentCardId);
         updateInfoPanel(info, entryDisplayTime, lastExitTimeMap.value(currentCardId));
+        if(entryTimeMap.contains(currentCardId))
+        {
+            activeInfoMap.insert(currentCardId, info);
+            updateParkingTable();
+        }
         //进行出入场逻辑（注册流程不进行出入场判断）
         if(!registrationFlowActive)
             handleParkingFlow();
@@ -625,6 +676,8 @@ void IEEE14443ControlWidget::handleInvalidCard()
     //清理停车状态
     entryTimeMap.remove(currentCardId);
     lastEntryTimeMap.remove(currentCardId);
+    activeInfoMap.remove(currentCardId);
+    updateParkingTable();
 
     //注册写卡后验证失败
     if(registrationVerificationPending)
@@ -868,6 +921,8 @@ void IEEE14443ControlWidget::handleParkingFlow()
 
         //移除入场时间信息
         entryTimeMap.remove(currentCardId);
+        activeInfoMap.remove(currentCardId);
+        updateParkingTable();
         //更新最近出场信息
         lastExitTimeMap.insert(currentCardId, now);
         //更新最近入场信息
@@ -896,6 +951,8 @@ void IEEE14443ControlWidget::handleParkingFlow()
             ui->parkingStatusLabel->setText(tr("正在入场中，不要收卡"));
         }
         entryTimeMap.insert(currentCardId, now);
+        activeInfoMap.insert(currentCardId, currentInfo);
+        updateParkingTable();
         lastEntryTimeMap.insert(currentCardId, now);
         pendingExitFee = 0;
         updateInfoPanel(currentInfo, now, QDateTime());
@@ -1176,6 +1233,11 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
                             entryTimeMap.value(currentCardId) ://当前入场时间
                             lastEntryTimeMap.value(currentCardId);//最近入场时间
                     updateInfoPanel(pendingWriteInfo, entryDisplayTime, lastExitTimeMap.value(currentCardId));
+                    if(entryTimeMap.contains(currentCardId) && pendingWriteInfo.valid)
+                    {
+                        activeInfoMap.insert(currentCardId, pendingWriteInfo);
+                        updateParkingTable();
+                    }
                 }
 
                 if(rechargePaused && !rechargeVerificationPending)
