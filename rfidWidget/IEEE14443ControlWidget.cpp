@@ -63,6 +63,7 @@ IEEE14443ControlWidget::IEEE14443ControlWidget(QWidget *parent) :
     lastExitFee(0),
     authKeyData(6, static_cast<char>(0xFF))
 {
+    //加载ui====================================
     ui->setupUi(this);
     if(ui->parkingTable)
     {
@@ -75,23 +76,30 @@ IEEE14443ControlWidget::IEEE14443ControlWidget(QWidget *parent) :
             header->setResizeMode(QHeaderView::Stretch);
     }
 
+    //信号槽连接和计时器==========================
     //收到包信号和处理包信息号
     connect(this, SIGNAL(recvPackage(QByteArray)), this, SLOT(onRecvedPackage(QByteArray)));
-//  connect(ui->statusList->verticalScrollBar(), SIGNAL(rangeChanged(int,int)), this, SLOT(onStatusListScrollRangeChanced(int,int)));
 
     //设置自动寻卡定时器，实现自动刷卡
     autoSearchTimer = new QTimer(this);
     autoSearchTimer->setInterval(500);
-    //连接信号到槽函数
+
+    //连接寻卡定时结束信号到槽函数
     connect(autoSearchTimer, SIGNAL(timeout()), this, SLOT(onAutoSearchTimeout()));
+
     //等待回包超时定时器
     replyTimeoutTimer = new QTimer(this);
     replyTimeoutTimer->setInterval(replyTimeoutMs);
     replyTimeoutTimer->setSingleShot(true);
+
+    //连接回包等待结束信号到槽函数
     connect(replyTimeoutTimer, SIGNAL(timeout()), this, SLOT(onReplyTimeout()));
+    
+    //状态复位==============================
     resetStatus();
 }
 
+//析构函数
 IEEE14443ControlWidget::~IEEE14443ControlWidget()
 {
     delete ui;
@@ -151,13 +159,8 @@ bool IEEE14443ControlWidget::stop()
 //发数据
 bool IEEE14443ControlWidget::sendData(const QByteArray &data)
 {
-//    IEEE1443PackageWidget *w = new IEEE1443PackageWidget(tr("Send"), data, this);
-//    ui->statusListLayout->addWidget(w);
-//    w->show();
     if(commPort)
     {
-        //qDebug()<<"send data = "<<data.toHex();
-        //qDebug()<<"rawPackage = "<<IEEE1443Package(data).toRawPackage().toHex();
         IEEE1443Package pkg(data);
         QByteArray rawPackage = pkg.toRawPackage();
         qDebug() << QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
@@ -1312,6 +1315,8 @@ void IEEE14443ControlWidget::onReplyTimeout()
     handleReplyTimeoutFailure(failedCommand);
 }
 
+//显示事件
+//控件显示时调用start（）
 void IEEE14443ControlWidget::showEvent(QShowEvent *)
 {
     if(!commPort)
@@ -1321,6 +1326,9 @@ void IEEE14443ControlWidget::showEvent(QShowEvent *)
         this->start("/dev/ttyS0");
     }
 }
+
+//隐藏事件
+//控件隐藏时调用Stop（）
 void IEEE14443ControlWidget::hideEvent(QHideEvent *)
 {
     if(commPort)
@@ -1328,7 +1336,10 @@ void IEEE14443ControlWidget::hideEvent(QHideEvent *)
         this->stop();
     }
 }
+
 static IEEE14443ControlWidget *ieee14443ControlWidget;
+
+//静态展示入口
 void IEEE14443ControlWidget::showOut()
 {
     if(ieee14443ControlWidget == NULL)
