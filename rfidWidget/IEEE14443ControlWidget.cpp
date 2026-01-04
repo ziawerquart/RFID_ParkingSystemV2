@@ -333,7 +333,7 @@ void IEEE14443ControlWidget::requestSearch()
 }
 
 // 功能：请求防冲突指令。
-void IEEE14443ControlWidget::requestSearch()
+void IEEE14443ControlWidget::requestAntiColl()
 {
     //等待回复——不发新指令
     if(waitingReply)
