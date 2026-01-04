@@ -59,76 +59,103 @@ signals:
     void recvPackage(QByteArray pkg);
 
 private:
+    // === UI与串口通信 ===
     Ui::IEEE14443ControlWidget *ui;
     //QextSerialPort *commPort;
     Posix_QextSerialPort *commPort;
     QTimer *autoSearchTimer;//自动寻卡-定时器
     QTimer *replyTimeoutTimer;//等待回包-定时器
-    QTimer *readTimer;
-    QByteArray lastSendPackage;
-    int recvStatus;
-    QByteArray lastRecvPackage;
-    bool waitingReply;//自动寻卡——是否等回复
-    int pendingCommand;//自动寻卡——等待回包的命令
-    int pendingRetries;
-    int maxReplyRetries;
-    int replyTimeoutMs;
-    QHash<QString, QDateTime> recentReplyTimestamps;
-    bool autoSearchInProgress;//自动寻卡——完整流程中
-    QString currentCardId;//自动寻卡——当前识别到的ID
-    bool tagAuthenticated;//自动寻卡——是否认证成功
-    QByteArray lastBlock1;//缓存块1、2数据
-    QByteArray lastBlock2;
-    int pendingReadBlock;//自动寻卡——指示当前等回包的所哪个块的读操作
-    int pendingWriteBlock;
-    TagInfo pendingWriteInfo;
-    TagInfo currentInfo;
-    QMap<QString, QDateTime> entryTimeMap;
-    QMap<QString, QDateTime> lastEntryTimeMap;
-    QMap<QString, QDateTime> lastExitTimeMap;
-    QMap<QString, TagInfo> activeInfoMap;
-    bool requiresInitialization;
-    bool refreshAfterWrite;
-    bool registrationPaused;
-    bool registrationFlowActive;
-    bool registrationVerificationPending;
-    bool registrationWritePending;
-    QString registrationPendingStatusText;
-    TagInfo registrationPendingInfo;
-    bool registrationAwaitingRemoval;
-    QString registrationAwaitingCardId;
-    bool rechargePaused;
-    bool rechargeFlowActive;
-    bool rechargeVerificationPending;
-    bool rechargeWritePending;
-    QString rechargePendingStatusText;
-    TagInfo rechargePendingInfo;
-    int rechargeExpectedBalance;
-    bool rechargeAwaitingRemoval;
-    QString rechargeAwaitingCardId;
-    int pendingExitFee;
-    bool parkingFlowPaused;
-    ParkingFlowState parkingFlowState;
-    bool parkingExitWritePending;
-    int lastExitFee;
-    QByteArray authKeyData;
+    QTimer *readTimer;//轮询读取串口数据
+
+    // === 通信包与状态管理 ===
+    QByteArray lastSendPackage;//最近发送包
+    QByteArray lastRecvPackage;//最近接收包
+    int recvStatus;//接收状态
+    bool waitingReply;//是否等待回包
+    int pendingCommand;//等待回包的命令
+    int pendingRetries;//当前重试次数
+    int maxReplyRetries;//最大重试次数
+    int replyTimeoutMs;//回包超时毫秒
+    QHash<QString, QDateTime> recentReplyTimestamps;//用于重复包过滤
+
+    // === 寻卡/认证与块数据 ===
+    bool autoSearchInProgress;//自动寻卡流程中
+    QString currentCardId;//当前识别到的ID
+    bool tagAuthenticated;//是否认证成功
+    QByteArray lastBlock1;//缓存块1数据
+    QByteArray lastBlock2;//缓存块2数据
+    int pendingReadBlock;//等待回包的读块编号
+    int pendingWriteBlock;//等待回包的写块编号
+    TagInfo pendingWriteInfo;//待写入的卡信息
+    TagInfo currentInfo;//当前卡信息
+    QByteArray authKeyData;//认证Key数据
+
+    // === 停车记录与费用 ===
+    QMap<QString, QDateTime> entryTimeMap;//当前入场时间
+    QMap<QString, QDateTime> lastEntryTimeMap;//历史入场时间
+    QMap<QString, QDateTime> lastExitTimeMap;//历史出场时间
+    QMap<QString, TagInfo> activeInfoMap;//当前在场信息
+    int pendingExitFee;//等待结算的费用
+    int lastExitFee;//上次结算费用
+    bool parkingFlowPaused;//停车流程暂停
+    ParkingFlowState parkingFlowState;//停车流程状态
+    bool parkingExitWritePending;//出场写卡待完成
+
+    // === 注册流程 ===
+    bool requiresInitialization;//是否需要初始化
+    bool refreshAfterWrite;//写卡后是否刷新
+    bool registrationPaused;//注册流程暂停
+    bool registrationFlowActive;//注册流程激活
+    bool registrationVerificationPending;//注册等待校验
+    bool registrationWritePending;//注册等待写入
+    QString registrationPendingStatusText;//注册提示文案
+    TagInfo registrationPendingInfo;//注册信息
+    bool registrationAwaitingRemoval;//注册等待移卡
+    QString registrationAwaitingCardId;//注册等待的卡号
+
+    // === 充值流程 ===
+    bool rechargePaused;//充值流程暂停
+    bool rechargeFlowActive;//充值流程激活
+    bool rechargeVerificationPending;//充值等待校验
+    bool rechargeWritePending;//充值等待写入
+    QString rechargePendingStatusText;//充值提示文案
+    TagInfo rechargePendingInfo;//充值信息
+    int rechargeExpectedBalance;//充值后预期余额
+    bool rechargeAwaitingRemoval;//充值等待移卡
+    QString rechargeAwaitingCardId;//充值等待的卡号
 
 
 private:
+    // === 通信与状态 ===
     bool sendData(const QByteArray &data);
     void resetStatus();
+    void startReplyTimeout(quint8 command);
+    void handleReplyTimeoutFailure(int command);
+    bool isDuplicateResponse(const IEEE1443Package &pkg);
+    void pruneRecentReplies();
+
+    // === 寻卡/协议指令 ===
     void startAutoSearch();
     void stopAutoSearch();
-    void pauseForRegistration();
-    void resumeAfterRegistration();
-    void pauseForRecharge(int feeRequired);
-    void resumeAfterRecharge();
     void requestSearch();
     void requestAntiColl();
     void requestSelect(const QByteArray &cardId);
     void requestAuth(quint8 blockNumber);
     void requestRead(quint8 blockNumber);
     void requestWrite(quint8 blockNumber, const QByteArray &data);
+
+    // === 业务流程控制 ===
+    void pauseForRegistration();
+    void resumeAfterRegistration();
+    void pauseForRecharge(int feeRequired);
+    void resumeAfterRecharge();
+    void handleParkingFlow();
+    int calculateFee(const QDateTime &enterTime, const QDateTime &leaveTime) const;
+    void writeUpdatedInfo(const TagInfo &info);
+    void ensureInitialized();
+    void handleInvalidCard();
+
+    // === 卡信息解析与UI更新 ===
     void handleTagInfo();
     bool decodeTagInfo(const QByteArray &b1, const QByteArray &b2, TagInfo &info);
     void encodeTagInfo(const TagInfo &info, QByteArray &b1, QByteArray &b2);
@@ -136,19 +163,12 @@ private:
     void updateInfoPanel(const TagInfo &info, const QDateTime &entryTime, const QDateTime &exitTime);
     void updateParkingTable();
     TagInfo defaultTagInfo() const;
-    void ensureInitialized();
-    void handleInvalidCard();
+
+    // === 注册/充值弹窗 ===
     bool showRegistrationDialog(TagInfo &info);
     void startRegistrationFlow();
     bool showRechargeDialog(int &amount);
     void startRechargeFlow(int feeRequired);
-    void handleParkingFlow();
-    int calculateFee(const QDateTime &enterTime, const QDateTime &leaveTime) const;
-    void writeUpdatedInfo(const TagInfo &info);
-    void startReplyTimeout(quint8 command);
-    void handleReplyTimeoutFailure(int command);
-    bool isDuplicateResponse(const IEEE1443Package &pkg);
-    void pruneRecentReplies();
 
 private slots:
     void onPortDataReady();
