@@ -858,12 +858,16 @@ void IEEE14443ControlWidget::startRechargeFlow(int feeRequired)
         return;
     }
 
-    if(rechargePaused && pendingExitFee > 0 && (currentInfo.balance + rechargeAmount < pendingExitFee))
+    if(rechargePaused && pendingExitFee > 0)
     {
-        QMessageBox::warning(this, tr("Recharge"), tr("请至少充值到覆盖待缴费用%1").arg(pendingExitFee));
-        ui->parkingStatusLabel->setText(tr("请重新充值"));
-        rechargeFlowActive = false;
-        return;
+        int requiredAmount = qMax(0, pendingExitFee - currentInfo.balance);
+        if(requiredAmount > 0 && rechargeAmount <= requiredAmount)
+        {
+            QMessageBox::warning(this, tr("Recharge"), tr("充值金额需超过欠费金额%1").arg(requiredAmount));
+            ui->parkingStatusLabel->setText(tr("请重新充值"));
+            rechargeFlowActive = false;
+            return;
+        }
     }
 
     TagInfo info = currentInfo;
