@@ -589,7 +589,6 @@ void IEEE14443ControlWidget::resumeAfterRecharge()
     if(!rechargePaused)
         return;
     rechargePaused = false;
-    pendingExitFee = 0;
     startAutoSearch();
 }
 
@@ -848,22 +847,29 @@ void IEEE14443ControlWidget::startRechargeFlow(int feeRequired)
     }
 
     int rechargeAmount = 0;
-    if(!showRechargeDialog(rechargeAmount))
+    while(true)
     {
-        rechargeFlowActive = false;
-        if(feeRequired == 0)
-            resumeAfterRecharge();
-        else
-            ui->parkingStatusLabel->setText(tr("请充值后出场"));
-        return;
-    }
+        if(!showRechargeDialog(rechargeAmount))
+        {
+            rechargeFlowActive = false;
+            if(feeRequired == 0)
+                resumeAfterRecharge();
+            else
+                ui->parkingStatusLabel->setText(tr("请充值后出场"));
+            return;
+        }
 
-    if(rechargePaused && pendingExitFee > 0 && (currentInfo.balance + rechargeAmount < pendingExitFee))
-    {
-        QMessageBox::warning(this, tr("Recharge"), tr("请至少充值到覆盖待缴费用%1").arg(pendingExitFee));
-        ui->parkingStatusLabel->setText(tr("请重新充值"));
-        rechargeFlowActive = false;
-        return;
+        if(rechargePaused && pendingExitFee > 0)
+        {
+            int requiredAmount = qMax(0, pendingExitFee - currentInfo.balance);
+            if(requiredAmount > 0 && rechargeAmount <= requiredAmount)
+            {
+                QMessageBox::warning(this, tr("Recharge"), tr("充值金额需超过待缴收费%1").arg(requiredAmount));
+                ui->parkingStatusLabel->setText(tr("请重新充值"));
+                continue;
+            }
+        }
+        break;
     }
 
     TagInfo info = currentInfo;
@@ -928,15 +934,15 @@ void IEEE14443ControlWidget::handleParkingFlow()
         //获取入场时间
         QDateTime enter = entryTimeMap.value(currentCardId);
         //算钱
-        int fee = calculateFee(enter, now);
+        int fee = pendingExitFee > 0 ? pendingExitFee : calculateFee(enter, now);
         //钱不够，提醒
         if(currentInfo.balance < fee)
         {
             //ui提醒
-            ui->parkingStatusLabel->setText(tr("余额不足，请先充值，最低收费金额%1").arg(fee));
+            ui->parkingStatusLabel->setText(tr("余额不足，请先充值，待缴收费%1").arg(fee));
             updateInfoPanel(currentInfo, enter, QDateTime());
             //进入充值流程
-            QMessageBox::warning(this, tr("出场"), tr("余额不足，请先充值，最低收费金额%1").arg(fee));
+            QMessageBox::warning(this, tr("出场"), tr("余额不足，请先充值，待缴收费%1").arg(fee));
             startRechargeFlow(fee);
             return;
         }
@@ -951,6 +957,7 @@ void IEEE14443ControlWidget::handleParkingFlow()
         lastEntryTimeMap.insert(currentCardId, enter);
         //扣费
         currentInfo.balance -= fee;
+        pendingExitFee = 0;
         lastExitFee = fee;
         ui->parkingStatusLabel->setText(tr("正在出场中，不要收卡"));
         updateInfoPanel(currentInfo, QDateTime(), now);
