@@ -465,7 +465,11 @@ bool IEEE14443ControlWidget::decodeTagInfo(const QByteArray &b1, const QByteArra
     if((b1.at(0) != kTagSignature1) || (b1.at(1) != kTagSignature2))
         return false;
     //3.解析车主信息
-    info.owner = QString::fromLatin1(b1.constData() + 4, 12).trimmed();
+    QByteArray ownerBytes = b1.mid(4, 12);
+    int nullIndex = ownerBytes.indexOf('\0');
+    if(nullIndex >= 0)
+        ownerBytes.truncate(nullIndex);
+    info.owner = QString::fromLatin1(ownerBytes).trimmed();
     info.vehicleType = vehicleTextFromCode(b1.at(3));
     //4.解析余额信息
     int bal = 0;
