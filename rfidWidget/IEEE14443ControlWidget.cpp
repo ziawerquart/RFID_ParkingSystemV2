@@ -597,105 +597,115 @@ void IEEE14443ControlWidget::ensureInitialized()
 {
     //1.尝试解析
     TagInfo info;
-    //1.1解析成功
-    if(decodeTagInfo(lastBlock1, lastBlock2, info))
+    if(!decodeTagInfo(lastBlock1, lastBlock2, info))
     {
-        requiresInitialization = false;
-        
-        if(registrationVerificationPending)//注册流程验证
-        {
-            registrationVerificationPending = false;
-            registrationFlowActive = false;
-            currentInfo = info;
-            updateInfoPanel(info, QDateTime(), QDateTime());
-            ui->parkingStatusLabel->setText(tr("注册成功，请收卡"));
-            registrationAwaitingRemoval = true;
-            registrationAwaitingCardId = currentCardId;
-            QMessageBox::information(this, tr("注册成功"), tr("注册成功，请收卡"));
-            resumeAfterRegistration();//继续自动寻卡
-            return;
-        }
-
-        if(rechargeVerificationPending)
-        {
-            rechargeVerificationPending = false;
-            rechargeFlowActive = false;
-            refreshAfterWrite = false;
-            currentInfo = info;
-            QDateTime entryDisplayTime = entryTimeMap.contains(currentCardId) ?
-                                         entryTimeMap.value(currentCardId) :
-                                         lastEntryTimeMap.value(currentCardId);
-            updateInfoPanel(info, entryDisplayTime, lastExitTimeMap.value(currentCardId));
-            currentInfo = info;
-            if(info.balance == rechargeExpectedBalance)
-            {
-                ui->parkingStatusLabel->setText(tr("充值成功，余额为%1").arg(info.balance));
-                rechargeAwaitingRemoval = true;
-                rechargeAwaitingCardId = currentCardId;
-                QMessageBox::information(this, tr("充值成功"), tr("充值成功，余额为%1").arg(info.balance));
-                if(pendingExitFee > 0 && info.balance >= pendingExitFee)
-                {
-                    resumeAfterRecharge();
-                    handleParkingFlow();
-                }
-                else if(pendingExitFee == 0)
-                {
-                    resumeAfterRecharge();
-                }
-            }
-            else
-            {
-                QMessageBox::warning(this, tr("充值失败"), tr("请重新充值"));
-                ui->parkingStatusLabel->setText(tr("请重新充值"));
-            }
-            return;
-        }
-
-        resumeAfterRegistration();//继续自动寻卡
-
-        if(registrationAwaitingRemoval && registrationAwaitingCardId == currentCardId)
-        {
-            ui->parkingStatusLabel->setText(tr("注册成功，请收卡"));
-            return;
-        }
-        registrationAwaitingRemoval = false;
-        registrationAwaitingCardId.clear();
-        if(rechargeAwaitingRemoval && rechargeAwaitingCardId == currentCardId)
-        {
-            ui->parkingStatusLabel->setText(tr("充值成功，余额为%1").arg(info.balance));
-            return;
-        }
-        rechargeAwaitingRemoval = false;
-        rechargeAwaitingCardId.clear();
-
-        //更新展示信息
-        currentInfo = info;
-        QDateTime entryDisplayTime = entryTimeMap.contains(currentCardId) ?
-                                     entryTimeMap.value(currentCardId) :
-                                     lastEntryTimeMap.value(currentCardId);
-        updateInfoPanel(info, entryDisplayTime, lastExitTimeMap.value(currentCardId));
-        if(entryTimeMap.contains(currentCardId))
-        {
-            activeInfoMap.insert(currentCardId, info);
-            updateParkingTable();
-        }
-        //进行出入场逻辑（注册流程不进行出入场判断）
-        if(!registrationFlowActive)
-            handleParkingFlow();
+        //1.2解析失败处理无效卡
+        handleInvalidCard();
         return;
     }
-    //1.2解析失败处理无效卡
-    handleInvalidCard();
+
+    //1.1解析成功
+    requiresInitialization = false;
+
+    auto entryDisplayTime = [this]()
+    {
+        return entryTimeMap.contains(currentCardId)
+            ? entryTimeMap.value(currentCardId)
+            : lastEntryTimeMap.value(currentCardId);
+    };
+    auto updateDisplayPanel = [&](const TagInfo &tagInfo)
+    {
+        currentInfo = tagInfo;
+        updateInfoPanel(tagInfo, entryDisplayTime(), lastExitTimeMap.value(currentCardId));
+    };
+
+    if(registrationVerificationPending)//注册流程验证
+    {
+        registrationVerificationPending = false;
+        registrationFlowActive = false;
+        currentInfo = info;
+        updateInfoPanel(info, QDateTime(), QDateTime());
+        ui->parkingStatusLabel->setText(tr("注册成功，请收卡"));
+        registrationAwaitingRemoval = true;
+        registrationAwaitingCardId = currentCardId;
+        QMessageBox::information(this, tr("注册成功"), tr("注册成功，请收卡"));
+        resumeAfterRegistration();//继续自动寻卡
+        return;
+    }
+
+    if(rechargeVerificationPending)
+    {
+        rechargeVerificationPending = false;
+        rechargeFlowActive = false;
+        refreshAfterWrite = false;
+        updateDisplayPanel(info);
+        if(info.balance == rechargeExpectedBalance)
+        {
+            ui->parkingStatusLabel->setText(tr("充值成功，余额为%1").arg(info.balance));
+            rechargeAwaitingRemoval = true;
+            rechargeAwaitingCardId = currentCardId;
+            QMessageBox::information(this, tr("充值成功"), tr("充值成功，余额为%1").arg(info.balance));
+            if(pendingExitFee > 0 && info.balance >= pendingExitFee)
+            {
+                resumeAfterRecharge();
+                handleParkingFlow();
+            }
+            else if(pendingExitFee == 0)
+            {
+                resumeAfterRecharge();
+            }
+        }
+        else
+        {
+            QMessageBox::warning(this, tr("充值失败"), tr("请重新充值"));
+            ui->parkingStatusLabel->setText(tr("请重新充值"));
+        }
+        return;
+    }
+
+    resumeAfterRegistration();//继续自动寻卡
+
+    if(registrationAwaitingRemoval && registrationAwaitingCardId == currentCardId)
+    {
+        ui->parkingStatusLabel->setText(tr("注册成功，请收卡"));
+        return;
+    }
+    registrationAwaitingRemoval = false;
+    registrationAwaitingCardId.clear();
+
+    if(rechargeAwaitingRemoval && rechargeAwaitingCardId == currentCardId)
+    {
+        ui->parkingStatusLabel->setText(tr("充值成功，余额为%1").arg(info.balance));
+        return;
+    }
+    rechargeAwaitingRemoval = false;
+    rechargeAwaitingCardId.clear();
+
+    //更新展示信息
+    updateDisplayPanel(info);
+    if(entryTimeMap.contains(currentCardId))
+    {
+        activeInfoMap.insert(currentCardId, info);
+        updateParkingTable();
+    }
+    //进行出入场逻辑（注册流程不进行出入场判断）
+    if(!registrationFlowActive)
+        handleParkingFlow();
 }
 
 // 功能：处理非法或格式不正确的卡。
 void IEEE14443ControlWidget::handleInvalidCard()
 {
+    auto clearParkingState = [this]()
+    {
+        entryTimeMap.remove(currentCardId);
+        lastEntryTimeMap.remove(currentCardId);
+        activeInfoMap.remove(currentCardId);
+        updateParkingTable();
+    };
+
     //清理停车状态
-    entryTimeMap.remove(currentCardId);
-    lastEntryTimeMap.remove(currentCardId);
-    activeInfoMap.remove(currentCardId);
-    updateParkingTable();
+    clearParkingState();
 
     //注册写卡后验证失败
     if(registrationVerificationPending)
