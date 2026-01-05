@@ -15,92 +15,15 @@
     <number>0</number>
    </property>
    <item>
-    <widget class="QGroupBox" name="tagInfoGroupBox">
-     <property name="title">
-      <string>Tag User Info</string>
-     </property>
-     <layout class="QVBoxLayout" name="verticalLayout_2">
-      <item>
-       <layout class="QGridLayout" name="gridLayout">
-        <item row="0" column="0">
-         <widget class="QLabel" name="label_owner">
-          <property name="text">
-           <string>Owner:</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="1">
-         <widget class="QLineEdit" name="ownerNameEdit">
-          <property name="maxLength">
-           <number>12</number>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="2">
-         <widget class="QLabel" name="label_vehicle">
-          <property name="text">
-           <string>Vehicle Type:</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="3">
-         <widget class="QComboBox" name="vehicleTypeBox">
-          <item>
-           <property name="text">
-            <string>Sedan</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>SUV</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>Truck</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>Electric</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>Other</string>
-           </property>
-          </item>
-         </widget>
-        </item>
-        <item row="1" column="0">
-         <widget class="QLabel" name="label_balance">
-          <property name="text">
-           <string>Balance:</string>
-          </property>
-         </widget>
-        </item>
-        <item row="1" column="1">
-         <widget class="QLineEdit" name="balanceEdit">
-          <property name="readOnly">
-           <bool>true</bool>
-          </property>
-         </widget>
-        </item>
-       </layout>
-      </item>
-      <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_infoButtons">
-        <item>
-         <widget class="QLabel" name="parkingStatusLabel">
-          <property name="text">
-           <string/>
-          </property>
-         </widget>
-        </item>
-       </layout>
-      </item>
-     </layout>
-    </widget>
+    <layout class="QHBoxLayout" name="horizontalLayout_infoButtons">
+     <item>
+      <widget class="QLabel" name="parkingStatusLabel">
+       <property name="text">
+        <string/>
+       </property>
+      </widget>
+     </item>
+    </layout>
    </item>
    <item>
     <widget class="QGroupBox" name="infoDisplayGroupBox">

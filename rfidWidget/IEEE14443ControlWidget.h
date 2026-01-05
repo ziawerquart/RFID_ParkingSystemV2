@@ -159,10 +159,8 @@ private:
     void handleTagInfo();
     bool decodeTagInfo(const QByteArray &b1, const QByteArray &b2, TagInfo &info);
     void encodeTagInfo(const TagInfo &info, QByteArray &b1, QByteArray &b2);
-    void updateInfoDisplay(const TagInfo &info);
     void updateInfoPanel(const TagInfo &info, const QDateTime &entryTime, const QDateTime &exitTime);
     void updateParkingTable();
-    TagInfo defaultTagInfo() const;
 
     // === 注册/充值弹窗 ===
     bool showRegistrationDialog(TagInfo &info);

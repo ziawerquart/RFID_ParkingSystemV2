@@ -236,7 +236,6 @@ void IEEE14443ControlWidget::resetStatus()
     //1.清空ui
     ui->selCardIdEdit->setText("");
     ui->resultLabel->setText("");
-    ui->balanceEdit->setText("");
     ui->parkingStatusLabel->setText("");
 
     //2.清空通信状态
@@ -503,22 +502,6 @@ void IEEE14443ControlWidget::encodeTagInfo(const TagInfo &info, QByteArray &b1, 
     b2[3] = (char)((info.balance >> 24) & 0xFF);
 }
 
-// 功能：更新编辑区域的车辆信息显示。
-void IEEE14443ControlWidget::updateInfoDisplay(const TagInfo &info)
-{
-    //车主姓名
-    ui->ownerNameEdit->setText(info.owner);
-    //车辆类型下拉框匹配项
-    int idx = ui->vehicleTypeBox->findText(info.vehicleType);
-    if(idx < 0)
-        idx = ui->vehicleTypeBox->findText("Other");
-    if(idx < 0)
-        idx = 0;
-    ui->vehicleTypeBox->setCurrentIndex(idx);
-    ui->balanceEdit->setText(QString::number(info.balance));
-    currentInfo = info;
-}
-
 // 功能：更新面板的进出场时间与余额显示。
 void IEEE14443ControlWidget::updateInfoPanel(const TagInfo &info, const QDateTime &entryTime, const QDateTime &exitTime)
 {
@@ -567,19 +550,6 @@ void IEEE14443ControlWidget::updateParkingTable()
         ui->parkingTable->setItem(row, 3, entryItem);
         ui->parkingTable->setItem(row, 4, balanceItem);
     }
-}
-
-// 功能：生成待写入的默认卡信息。
-IEEE14443ControlWidget::TagInfo IEEE14443ControlWidget::defaultTagInfo() const
-{
-    TagInfo info;
-    info.owner = ui->ownerNameEdit->text();
-    if(info.owner.isEmpty())
-        info.owner = tr("Unknown");
-    info.vehicleType = ui->vehicleTypeBox->currentText();
-    info.balance = 0;
-    info.valid = true;
-    return info;
 }
 
 
@@ -633,7 +603,7 @@ void IEEE14443ControlWidget::ensureInitialized()
         {
             registrationVerificationPending = false;
             registrationFlowActive = false;
-            updateInfoDisplay(info);
+            currentInfo = info;
             updateInfoPanel(info, QDateTime(), QDateTime());
             ui->parkingStatusLabel->setText(tr("注册成功，请收卡"));
             registrationAwaitingRemoval = true;
@@ -648,7 +618,7 @@ void IEEE14443ControlWidget::ensureInitialized()
             rechargeVerificationPending = false;
             rechargeFlowActive = false;
             refreshAfterWrite = false;
-            updateInfoDisplay(info);
+            currentInfo = info;
             QDateTime entryDisplayTime = entryTimeMap.contains(currentCardId) ?
                                          entryTimeMap.value(currentCardId) :
                                          lastEntryTimeMap.value(currentCardId);
@@ -696,7 +666,7 @@ void IEEE14443ControlWidget::ensureInitialized()
         rechargeAwaitingCardId.clear();
 
         //更新展示信息
-        updateInfoDisplay(info);
+        currentInfo = info;
         QDateTime entryDisplayTime = entryTimeMap.contains(currentCardId) ?
                                      entryTimeMap.value(currentCardId) :
                                      lastEntryTimeMap.value(currentCardId);
@@ -760,13 +730,12 @@ bool IEEE14443ControlWidget::showRegistrationDialog(TagInfo &info)
 
     QLineEdit *nameEdit = new QLineEdit(&dialog);
     nameEdit->setMaxLength(12);
-    nameEdit->setText(ui->ownerNameEdit->text());
+    nameEdit->setText(QString());
     form.addRow(tr("姓名"), nameEdit);
 
     QComboBox *vehicleBox = new QComboBox(&dialog);
     vehicleBox->addItems(QStringList() << "Sedan" << "SUV" << "Truck" << "Electric" << "Other");
-    int currentVehicleIndex = vehicleBox->findText(ui->vehicleTypeBox->currentText());
-    vehicleBox->setCurrentIndex(currentVehicleIndex < 0 ? 0 : currentVehicleIndex);
+    vehicleBox->setCurrentIndex(0);
     form.addRow(tr("车型"), vehicleBox);
 
     QSpinBox *balanceSpin = new QSpinBox(&dialog);
@@ -980,7 +949,6 @@ void IEEE14443ControlWidget::handleParkingFlow()
         currentInfo.balance -= fee;
         lastExitFee = fee;
         ui->parkingStatusLabel->setText(tr("正在出场中，不要收卡"));
-        updateInfoDisplay(currentInfo);
         updateInfoPanel(currentInfo, QDateTime(), now);
 
         //不需要读回
@@ -1326,7 +1294,7 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
             else if(pendingWriteBlock == kUserBlock2)//如果b2已写入
             {
                 pendingWriteBlock = -1;
-                updateInfoDisplay(pendingWriteInfo);//更新显示
+                currentInfo = pendingWriteInfo;
                 if(refreshAfterWrite)//写完后是否刷新——用于注册后显示车主信息
                 {
                     refreshAfterWrite = false;
