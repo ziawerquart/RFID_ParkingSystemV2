@@ -602,37 +602,56 @@ void IEEE14443ControlWidget::ensureInitialized()
     {
         requiresInitialization = false;
         
-        if(registrationVerificationPending)//注册流程验证
+        //2.1注册校验
+        if(registrationVerificationPending)
         {
+            //3.充值状态
             registrationVerificationPending = false;
             registrationFlowActive = false;
+            //4，记录当前info
             currentInfo = info;
+            //5.更新ui
             updateInfoPanel(info, QDateTime(), QDateTime());
+            //6.提示信息
             ui->parkingStatusLabel->setText(tr("注册成功，请收卡"));
+            //7.设置等待取卡状态
             registrationAwaitingRemoval = true;
             registrationAwaitingCardId = currentCardId;
+            //7.弹出提示框
             QMessageBox::information(this, tr("注册成功"), tr("注册成功，请收卡"));
-            resumeAfterRegistration();//继续自动寻卡
+            //8.继续自动寻卡
+            resumeAfterRegistration();
+
             return;
         }
 
+        //2.2充值校验
         if(rechargeVerificationPending)
         {
+            //3.重置流程状态
             rechargeVerificationPending = false;
             rechargeFlowActive = false;
             refreshAfterWrite = false;
+            //2.记录当前info
             currentInfo = info;
+            //3.读取入场时间
             QDateTime entryDisplayTime = entryTimeMap.contains(currentCardId) ?
                                          entryTimeMap.value(currentCardId) :
                                          lastEntryTimeMap.value(currentCardId);
+            //4.更新ui
             updateInfoPanel(info, entryDisplayTime, lastExitTimeMap.value(currentCardId));
             currentInfo = info;
+            //5.1充值成功
             if(info.balance == rechargeExpectedBalance)
             {
+                //6.ui提示
                 ui->parkingStatusLabel->setText(tr("充值成功，余额为%1").arg(info.balance));
+                //7，等待取卡
                 rechargeAwaitingRemoval = true;
                 rechargeAwaitingCardId = currentCardId;
+                //8.提示信息
                 QMessageBox::information(this, tr("充值成功"), tr("充值成功，余额为%1").arg(info.balance));
+                //9。校验余额
                 if(pendingExitFee > 0 && info.balance >= pendingExitFee)
                 {
                     resumeAfterRecharge();
@@ -643,16 +662,20 @@ void IEEE14443ControlWidget::ensureInitialized()
                     resumeAfterRecharge();
                 }
             }
-            else
+            else//5.2充值失败
             {
                 QMessageBox::warning(this, tr("充值失败"), tr("请重新充值"));
                 ui->parkingStatusLabel->setText(tr("请重新充值"));
             }
             return;
         }
+        
+        //2.3常规解析成功后
+        //3.继续自动寻卡 
+        resumeAfterRegistration();
 
-        resumeAfterRegistration();//继续自动寻卡
-
+        //4.处理等待取卡
+        //4.1注册时等待取卡
         if(registrationAwaitingRemoval && registrationAwaitingCardId == currentCardId)
         {
             ui->parkingStatusLabel->setText(tr("注册成功，请收卡"));
@@ -660,6 +683,7 @@ void IEEE14443ControlWidget::ensureInitialized()
         }
         registrationAwaitingRemoval = false;
         registrationAwaitingCardId.clear();
+        //4.2充值时等待取卡
         if(rechargeAwaitingRemoval && rechargeAwaitingCardId == currentCardId)
         {
             ui->parkingStatusLabel->setText(tr("充值成功，余额为%1").arg(info.balance));
@@ -668,18 +692,21 @@ void IEEE14443ControlWidget::ensureInitialized()
         rechargeAwaitingRemoval = false;
         rechargeAwaitingCardId.clear();
 
-        //更新展示信息
+        //5.更新展示信息
         currentInfo = info;
+        //更新信息面板
         QDateTime entryDisplayTime = entryTimeMap.contains(currentCardId) ?
                                      entryTimeMap.value(currentCardId) :
                                      lastEntryTimeMap.value(currentCardId);
         updateInfoPanel(info, entryDisplayTime, lastExitTimeMap.value(currentCardId));
+        //更新停车表
         if(entryTimeMap.contains(currentCardId))
         {
             activeInfoMap.insert(currentCardId, info);
             updateParkingTable();
         }
-        //进行出入场逻辑（注册流程不进行出入场判断）
+       
+        //6.进行出入场逻辑（注册流程不进行出入场判断）
         if(!registrationFlowActive)
             handleParkingFlow();
         return;
@@ -1135,18 +1162,20 @@ void IEEE14443ControlWidget::onPortDataReady()
 void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
 {
 
+    //1.前置检验
     IEEE1443Package p(pkg);
     if(!p.isValid())
         return;
-    if(!waitingReply && pendingCommand < 0)
+    if(!waitingReply && pendingCommand < 0)//没有等待响应
         return;
-    if(waitingReply && pendingCommand >= 0 && p.command() != pendingCommand)
+    if(waitingReply && pendingCommand >= 0 && p.command() != pendingCommand)//等待响应但指令码不匹配
         return;
-    if(isDuplicateResponse(p))
+    if(isDuplicateResponse(p))//避免重复响应
         return;
-    if(replyTimeoutTimer && replyTimeoutTimer->isActive())
+    if(replyTimeoutTimer && replyTimeoutTimer->isActive())//停止超时计时器
         replyTimeoutTimer->stop();
-    //qDebug()<<"the recieve pkg"<<pkg.toHex();
+
+    //2.打印日志，解析load
     qDebug() << QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
              << QString("recieve cmd=0x%1 data=%2")
                 .arg(p.command(), 2, 16, QChar('0'))
@@ -1156,17 +1185,22 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
     {
         qDebug() << QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
                  << "empty payload for cmd" << p.command();
+                 
+        //清理等待状态
         waitingReply = false;
         pendingCommand = -1;
         autoSearchInProgress = false;
         return;
     }
+    //记录指令状态和信息
     int status = d.at(0);
     d = d.mid(1);
     waitingReply = false;
     pendingCommand = -1;
-    pendingRetries = 0;
+    pendingRetries = 0;//当前重试发包次数
     QString resultTipText;
+
+    //3.命令分发逻辑
     switch(p.command())
     {
     case IEEE1443Package::SearchCard:
@@ -1235,7 +1269,7 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
             resultTipText += tr("Succeed");
         else
             resultTipText += tr("Failure");
-        tagAuthenticated = (status == 0);
+        tagAuthenticated = (status == 0);//记录认证信息
         if(tagAuthenticated)
             requestRead(kUserBlock1);//停车系统实现自动识别卡片功能，自动读块1用于判断是不是停车系统
         else
@@ -1246,18 +1280,17 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
         if(status == 0)
         {
             resultTipText += tr("Succeed");
-            // 读卡指令的响应, 可以获得卡内数据
-            // 读取正常
-            if(pendingReadBlock == kUserBlock1)//待读块1
+            //待读块1
+            if(pendingReadBlock == kUserBlock1)
             {
-                lastBlock1 = d;
+                lastBlock1 = d;//保存块1
                 requestRead(kUserBlock2);//读完块1，自动读块2
             }
             else if(pendingReadBlock == kUserBlock2)//待读块2
             {
                 lastBlock2 = d;
                 pendingReadBlock = -1;
-                //确认初始化
+                //根据读到的卡信息做相应处理
                 ensureInitialized();
                 autoSearchInProgress = false;
             }
@@ -1267,6 +1300,7 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
             resultTipText += tr("Failure");
             pendingReadBlock = -1;
             autoSearchInProgress = false;
+            //若是充值校验
             if(rechargeVerificationPending)
             {
                 rechargeVerificationPending = false;
@@ -1276,6 +1310,7 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
                 ui->parkingStatusLabel->setText(tr("请重新充值"));
                 break;
             }
+            //若不是注册流程且卡已识别——出入场逻辑
             if(!registrationFlowActive && !requiresInitialization && !currentCardId.isEmpty())
             {
                 if(entryTimeMap.contains(currentCardId))
@@ -1297,27 +1332,33 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
         if(status == 0)//写成功
         {
             resultTipText += tr("Succeed");
-            if(pendingWriteBlock == kUserBlock1)//如果待写入b2
+            //继续写下一块
+            if(pendingWriteBlock == kUserBlock1)
             {
                 pendingWriteBlock = -1;
-                requestWrite(kUserBlock2, lastBlock2);//继续写b2
+                requestWrite(kUserBlock2, lastBlock2);
             }
             else if(pendingWriteBlock == kUserBlock2)//如果b2已写入
             {
                 pendingWriteBlock = -1;
-                currentInfo = pendingWriteInfo;
-                if(refreshAfterWrite)//写完后是否刷新——用于注册后显示车主信息
+                currentInfo = pendingWriteInfo;//更新当前info
+
+                //需要读回验证——注册、充值
+                if(refreshAfterWrite)
                 {
                     refreshAfterWrite = false;
                     requestRead(kUserBlock1);//马上读块1
                 }
-                else//写完后不用刷新，直接更新展示信息——用于充值/扣费逻辑
+                else//不需要读回验证——出场
                 {
+                    //更新ui
                     QDateTime entryDisplayTime =
                             entryTimeMap.contains(currentCardId) ?//仍然在场？
                             entryTimeMap.value(currentCardId) ://当前入场时间
                             lastEntryTimeMap.value(currentCardId);//最近入场时间
                     updateInfoPanel(pendingWriteInfo, entryDisplayTime, lastExitTimeMap.value(currentCardId));
+
+                    //更新停车标
                     if(entryTimeMap.contains(currentCardId) && pendingWriteInfo.valid)
                     {
                         activeInfoMap.insert(currentCardId, pendingWriteInfo);
@@ -1325,6 +1366,7 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
                     }
                 }
 
+                //充值——余额足够
                 if(rechargePaused && !rechargeVerificationPending)
                 {
                     currentInfo = pendingWriteInfo;//同步到系统当前信息
@@ -1339,6 +1381,7 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
                     }
                 }
 
+                //出场写卡成功
                 if(parkingExitWritePending && parkingFlowState == ParkingFlowExit && !rechargePaused)
                 {
                     parkingExitWritePending = false;
@@ -1379,6 +1422,8 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
         break;
     }
 
+    //4.写卡后自动触发二次写入逻辑
+    //注册写卡
     if(registrationWritePending && !waitingReply)
     {
         registrationWritePending = false;
@@ -1387,6 +1432,7 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
         writeUpdatedInfo(registrationPendingInfo);
         ui->parkingStatusLabel->setText(registrationPendingStatusText);
     }
+    //充值写卡
     if(rechargeWritePending && !waitingReply)
     {
         rechargeWritePending = false;
