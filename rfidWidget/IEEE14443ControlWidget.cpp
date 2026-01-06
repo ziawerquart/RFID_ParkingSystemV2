@@ -425,6 +425,7 @@ void IEEE14443ControlWidget::requestWrite(quint8 blockNumber, const QByteArray &
 // 功能：车辆类型文本转编码。
 static char vehicleCodeFromText(const QString &text)
 {
+    //1.按车型文本映射编码
     if(text == "Sedan")
         return 1;
     if(text == "SUV")
@@ -439,6 +440,7 @@ static char vehicleCodeFromText(const QString &text)
 // 功能：车辆类型编码转文本。
 static QString vehicleTextFromCode(char c)
 {
+    //1.按车型编码映射文本
     switch((int)(unsigned char)c)
     {
     case 1:
@@ -509,10 +511,13 @@ void IEEE14443ControlWidget::encodeTagInfo(const TagInfo &info, QByteArray &b1, 
 // 功能：更新面板的进出场时间与余额显示。
 void IEEE14443ControlWidget::updateInfoPanel(const TagInfo &info, const QDateTime &entryTime, const QDateTime &exitTime)
 {
+    //1.刷新车主与车型信息
     ui->infoOwnerValue->setText(info.valid ? info.owner : tr("N/A"));
     ui->infoVehicleValue->setText(info.valid ? info.vehicleType : tr("N/A"));
+    //2.刷新进出场时间信息
     ui->infoEntryTimeValue->setText(entryTime.isValid() ? entryTime.toString("hh:mm:ss") : tr("--"));
     ui->infoExitTimeValue->setText(exitTime.isValid() ? exitTime.toString("hh:mm:ss") : tr("--"));
+    //3.刷新余额信息
     if(info.valid)
         ui->infoBalanceValue->setText(QString::number(info.balance));
     else
@@ -562,15 +567,19 @@ void IEEE14443ControlWidget::updateParkingTable()
 // 功能：注册开始时暂停自动寻卡流程。
 void IEEE14443ControlWidget::pauseForRegistration()
 {
+    //1.标记注册暂停状态
     registrationPaused = true;
+    //2.停止自动寻卡
     stopAutoSearch();
 }
 
 // 功能：注册结束后恢复自动寻卡流程。
 void IEEE14443ControlWidget::resumeAfterRegistration()
 {
+    //1.判断是否处于注册暂停状态
     if(!registrationPaused)
         return;
+    //2.清理状态并恢复自动寻卡
     registrationPaused = false;
     startAutoSearch();
 }
@@ -578,16 +587,21 @@ void IEEE14443ControlWidget::resumeAfterRegistration()
 // 功能：充值开始时暂停自动寻卡流程并提示。
 void IEEE14443ControlWidget::pauseForRecharge(int feeRequired)
 {
+    //1.标记充值暂停状态
     rechargePaused = true;
+    //2.记录待缴费用
     pendingExitFee = feeRequired;
+    //3.停止自动寻卡
     stopAutoSearch();
 }
 
 // 功能：充值结束后恢复自动寻卡流程。
 void IEEE14443ControlWidget::resumeAfterRecharge()
 {
+    //1.判断是否处于充值暂停状态
     if(!rechargePaused)
         return;
+    //2.清理状态并恢复自动寻卡
     rechargePaused = false;
     startAutoSearch();
 }
@@ -754,6 +768,7 @@ void IEEE14443ControlWidget::handleInvalidCard()
 // 功能：弹出注册对话框收集用户信息。
 bool IEEE14443ControlWidget::showRegistrationDialog(TagInfo &info)
 {
+    //1.构建注册对话框
     QDialog dialog(this);
     dialog.setWindowTitle(tr("注册新卡"));
     QFormLayout form(&dialog);
@@ -778,9 +793,11 @@ bool IEEE14443ControlWidget::showRegistrationDialog(TagInfo &info)
     connect(&buttons, SIGNAL(accepted()), &dialog, SLOT(accept()));
     connect(&buttons, SIGNAL(rejected()), &dialog, SLOT(reject()));
 
+    //2.确认或取消注册
     if(dialog.exec() != QDialog::Accepted)
         return false;
 
+    //3.写入注册信息
     info.owner = nameEdit->text().isEmpty() ? tr("Unknown") : nameEdit->text();
     info.vehicleType = vehicleBox->currentText();
     info.balance = balanceSpin->value();
@@ -821,6 +838,7 @@ void IEEE14443ControlWidget::startRegistrationFlow()
 // 功能：弹出充值对话框输入金额。
 bool IEEE14443ControlWidget::showRechargeDialog(int &amount)
 {
+    //1.构建充值对话框
     QDialog dialog(this);
     dialog.setWindowTitle(tr("充值"));
     QFormLayout form(&dialog);
@@ -841,9 +859,11 @@ bool IEEE14443ControlWidget::showRechargeDialog(int &amount)
     connect(&buttons, SIGNAL(accepted()), &dialog, SLOT(accept()));
     connect(&buttons, SIGNAL(rejected()), &dialog, SLOT(reject()));
 
+    //2.确认或取消充值
     if(dialog.exec() != QDialog::Accepted)
         return false;
 
+    //3.记录充值金额
     amount = amountSpin->value();
     return true;
 }
@@ -921,12 +941,15 @@ void IEEE14443ControlWidget::startRechargeFlow(int feeRequired)
 // 功能：计算停车费用。
 int IEEE14443ControlWidget::calculateFee(const QDateTime &enterTime, const QDateTime &leaveTime) const
 {
+    //1.计算停车时长（秒）
     int secs = (int)enterTime.secsTo(leaveTime);
     if(secs < 0)
         secs = 0;
+    //2.换算为计费小时
     int minutes = secs / 60;
     int hours = (minutes + 59) / 60;
     //return hours * kHourFee;
+    //3.返回费用
     return secs;//测试用
 }
 
@@ -1046,7 +1069,9 @@ void IEEE14443ControlWidget::writeUpdatedInfo(const TagInfo &info)
 // 功能：启动等待回包超时计时。
 void IEEE14443ControlWidget::startReplyTimeout(quint8 command)
 {
+    //1.保留接口参数
     Q_UNUSED(command);
+    //2.启动计时器
     if(!replyTimeoutTimer)
         return;
     replyTimeoutTimer->setInterval(replyTimeoutMs);
@@ -1448,6 +1473,9 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
 // 功能：状态列表滚动范围变化处理。
 void IEEE14443ControlWidget::onStatusListScrollRangeChanced(int min, int max)
 {
+    //1.保留接口参数
+    Q_UNUSED(min);
+    Q_UNUSED(max);
 //    ui->statusList->verticalScrollBar()->setValue(max);
 }
 
