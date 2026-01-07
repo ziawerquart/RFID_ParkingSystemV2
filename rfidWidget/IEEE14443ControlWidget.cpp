@@ -311,6 +311,7 @@ void IEEE14443ControlWidget::startAutoSearch()
 // 功能：停止自动寻卡定时器。
 void IEEE14443ControlWidget::stopAutoSearch()
 {
+    //1.停止定时器
     if(autoSearchTimer)
         autoSearchTimer->stop();
 }
@@ -334,10 +335,10 @@ void IEEE14443ControlWidget::requestSearch()
 // 功能：请求防冲突指令。
 void IEEE14443ControlWidget::requestAntiColl()
 {
-    //等待回复——不发新指令
+    //1.等待回复——不发新指令
     if(waitingReply)
         return;
-    //构造存储并发送防冲突包
+    //2.构造存储并发送防冲突包
     lastSendPackage = IEEE1443Package(0, IEEE1443Package::AntiColl, 0x04).toPurePackage();
     sendData(lastSendPackage);
 }
@@ -425,6 +426,7 @@ void IEEE14443ControlWidget::requestWrite(quint8 blockNumber, const QByteArray &
 // 功能：车辆类型文本转编码。
 static char vehicleCodeFromText(const QString &text)
 {
+    //1.按车型文本映射编码
     if(text == "Sedan")
         return 1;
     if(text == "SUV")
@@ -439,6 +441,7 @@ static char vehicleCodeFromText(const QString &text)
 // 功能：车辆类型编码转文本。
 static QString vehicleTextFromCode(char c)
 {
+    //1.按车型编码映射文本
     switch((int)(unsigned char)c)
     {
     case 1:
@@ -509,10 +512,13 @@ void IEEE14443ControlWidget::encodeTagInfo(const TagInfo &info, QByteArray &b1, 
 // 功能：更新面板的进出场时间与余额显示。
 void IEEE14443ControlWidget::updateInfoPanel(const TagInfo &info, const QDateTime &entryTime, const QDateTime &exitTime)
 {
+    //1.刷新车主与车型信息
     ui->infoOwnerValue->setText(info.valid ? info.owner : tr("N/A"));
     ui->infoVehicleValue->setText(info.valid ? info.vehicleType : tr("N/A"));
+    //2.刷新进出场时间信息
     ui->infoEntryTimeValue->setText(entryTime.isValid() ? entryTime.toString("hh:mm:ss") : tr("--"));
     ui->infoExitTimeValue->setText(exitTime.isValid() ? exitTime.toString("hh:mm:ss") : tr("--"));
+    //3.刷新余额信息
     if(info.valid)
         ui->infoBalanceValue->setText(QString::number(info.balance));
     else
@@ -562,15 +568,19 @@ void IEEE14443ControlWidget::updateParkingTable()
 // 功能：注册开始时暂停自动寻卡流程。
 void IEEE14443ControlWidget::pauseForRegistration()
 {
+    //1.标记注册暂停状态
     registrationPaused = true;
+    //2.停止自动寻卡
     stopAutoSearch();
 }
 
 // 功能：注册结束后恢复自动寻卡流程。
 void IEEE14443ControlWidget::resumeAfterRegistration()
 {
+    //1.判断是否处于注册暂停状态
     if(!registrationPaused)
         return;
+    //2.清理状态并恢复自动寻卡
     registrationPaused = false;
     startAutoSearch();
 }
@@ -578,16 +588,21 @@ void IEEE14443ControlWidget::resumeAfterRegistration()
 // 功能：充值开始时暂停自动寻卡流程并提示。
 void IEEE14443ControlWidget::pauseForRecharge(int feeRequired)
 {
+    //1.标记充值暂停状态
     rechargePaused = true;
+    //2.记录待缴费用
     pendingExitFee = feeRequired;
+    //3.停止自动寻卡
     stopAutoSearch();
 }
 
 // 功能：充值结束后恢复自动寻卡流程。
 void IEEE14443ControlWidget::resumeAfterRecharge()
 {
+    //1.判断是否处于充值暂停状态
     if(!rechargePaused)
         return;
+    //2.清理状态并恢复自动寻卡
     rechargePaused = false;
     startAutoSearch();
 }
@@ -718,13 +733,13 @@ void IEEE14443ControlWidget::ensureInitialized()
 // 功能：处理非法或格式不正确的卡。
 void IEEE14443ControlWidget::handleInvalidCard()
 {
-    //清理停车状态
+    //1.清理停车状态
     entryTimeMap.remove(currentCardId);
     lastEntryTimeMap.remove(currentCardId);
     activeInfoMap.remove(currentCardId);
     updateParkingTable();
 
-    //注册写卡后验证失败
+    //2.注册写卡后验证失败
     if(registrationVerificationPending)
     {
         registrationVerificationPending = false;
@@ -738,7 +753,7 @@ void IEEE14443ControlWidget::handleInvalidCard()
         return;
     }
 
-    //只在第一次进入未初始化状态时提示要初始化
+    //3.只在第一次进入未初始化状态时提示要初始化
     if(!requiresInitialization)
         QMessageBox::information(this, tr("未注册卡片"), tr("请先注册，不要收卡"));
     requiresInitialization = true;
@@ -747,6 +762,7 @@ void IEEE14443ControlWidget::handleInvalidCard()
     updateInfoPanel(TagInfo(), QDateTime(), QDateTime());
     ui->parkingStatusLabel->setText(tr("Card not initialized, please register"));
 
+    //4.触发注册流程
     if(!registrationFlowActive)
         startRegistrationFlow();
 }
@@ -754,6 +770,7 @@ void IEEE14443ControlWidget::handleInvalidCard()
 // 功能：弹出注册对话框收集用户信息。
 bool IEEE14443ControlWidget::showRegistrationDialog(TagInfo &info)
 {
+    //1.构建注册对话框
     QDialog dialog(this);
     dialog.setWindowTitle(tr("注册新卡"));
     QFormLayout form(&dialog);
@@ -778,9 +795,11 @@ bool IEEE14443ControlWidget::showRegistrationDialog(TagInfo &info)
     connect(&buttons, SIGNAL(accepted()), &dialog, SLOT(accept()));
     connect(&buttons, SIGNAL(rejected()), &dialog, SLOT(reject()));
 
+    //2.确认或取消注册
     if(dialog.exec() != QDialog::Accepted)
         return false;
 
+    //3.写入注册信息
     info.owner = nameEdit->text().isEmpty() ? tr("Unknown") : nameEdit->text();
     info.vehicleType = vehicleBox->currentText();
     info.balance = balanceSpin->value();
@@ -791,11 +810,13 @@ bool IEEE14443ControlWidget::showRegistrationDialog(TagInfo &info)
 // 功能：启动注册流程并请求写卡。
 void IEEE14443ControlWidget::startRegistrationFlow()
 {
+    //1.进入注册流程
     registrationFlowActive = true;
     pauseForRegistration();
     TagInfo info;
     if(!showRegistrationDialog(info))
     {
+        //2.用户取消注册
         registrationFlowActive = false;
         requiresInitialization = false;
         registrationAwaitingRemoval = false;
@@ -804,6 +825,7 @@ void IEEE14443ControlWidget::startRegistrationFlow()
         ui->parkingStatusLabel->setText(tr("注册已取消"));
         return;
     }
+    //3.等待通信时缓存写卡信息
     if(waitingReply)
     {
         registrationWritePending = true;
@@ -812,6 +834,7 @@ void IEEE14443ControlWidget::startRegistrationFlow()
         ui->parkingStatusLabel->setText(tr("等待当前操作完成..."));
         return;
     }
+    //4.直接写卡并等待读回校验
     registrationVerificationPending = true;
     refreshAfterWrite = true;
     writeUpdatedInfo(info);
@@ -821,6 +844,7 @@ void IEEE14443ControlWidget::startRegistrationFlow()
 // 功能：弹出充值对话框输入金额。
 bool IEEE14443ControlWidget::showRechargeDialog(int &amount)
 {
+    //1.构建充值对话框
     QDialog dialog(this);
     dialog.setWindowTitle(tr("充值"));
     QFormLayout form(&dialog);
@@ -841,9 +865,11 @@ bool IEEE14443ControlWidget::showRechargeDialog(int &amount)
     connect(&buttons, SIGNAL(accepted()), &dialog, SLOT(accept()));
     connect(&buttons, SIGNAL(rejected()), &dialog, SLOT(reject()));
 
+    //2.确认或取消充值
     if(dialog.exec() != QDialog::Accepted)
         return false;
 
+    //3.记录充值金额
     amount = amountSpin->value();
     return true;
 }
@@ -851,11 +877,13 @@ bool IEEE14443ControlWidget::showRechargeDialog(int &amount)
 // 功能：启动充值流程并请求写卡。
 void IEEE14443ControlWidget::startRechargeFlow(int feeRequired)
 {
+    //1.检查充值流程是否已启动
     if(rechargeFlowActive)
         return;
     rechargeFlowActive = true;
     pauseForRecharge(feeRequired);
 
+    //2.检查认证和初始化状态
     if(!tagAuthenticated)
     {
         QMessageBox::warning(this, tr("Warning"), tr("authenticate first"));
@@ -873,6 +901,7 @@ void IEEE14443ControlWidget::startRechargeFlow(int feeRequired)
         return;
     }
 
+    //3.循环获取合法充值金额
     int rechargeAmount = 0;
     while(true)
     {
@@ -886,6 +915,7 @@ void IEEE14443ControlWidget::startRechargeFlow(int feeRequired)
             return;
         }
 
+        //4.出场充值时确保金额足够
         if(rechargePaused && pendingExitFee > 0)
         {
             int requiredAmount = qMax(0, pendingExitFee - currentInfo.balance);
@@ -899,11 +929,13 @@ void IEEE14443ControlWidget::startRechargeFlow(int feeRequired)
         break;
     }
 
+    //5.更新余额并准备写卡
     TagInfo info = currentInfo;
     info.balance += rechargeAmount;
     rechargeExpectedBalance = info.balance;
     rechargePendingInfo = info;
 
+    //6.等待通信时缓存写卡信息
     if(waitingReply)
     {
         rechargeWritePending = true;
@@ -912,6 +944,7 @@ void IEEE14443ControlWidget::startRechargeFlow(int feeRequired)
         return;
     }
 
+    //7.写卡并等待读回校验
     rechargeVerificationPending = true;
     refreshAfterWrite = true;
     writeUpdatedInfo(info);
@@ -921,24 +954,28 @@ void IEEE14443ControlWidget::startRechargeFlow(int feeRequired)
 // 功能：计算停车费用。
 int IEEE14443ControlWidget::calculateFee(const QDateTime &enterTime, const QDateTime &leaveTime) const
 {
+    //1.计算停车时长（秒）
     int secs = (int)enterTime.secsTo(leaveTime);
     if(secs < 0)
         secs = 0;
+    //2.换算为计费小时
     int minutes = secs / 60;
     int hours = (minutes + 59) / 60;
     //return hours * kHourFee;
+    //3.返回费用
     return secs;//测试用
 }
 
 // 功能：处理停车进出场业务流程。
 void IEEE14443ControlWidget::handleParkingFlow()
 {
+    //1.注册流程中不处理出入场
     if(registrationFlowActive)
         return;
-    //检查当前卡信息
+    //2.检查当前卡信息
     if(currentCardId.isEmpty() || !currentInfo.valid)
         return;
-    //判断是否初始化
+    //3.判断是否初始化
     if(requiresInitialization)
     {
         ui->parkingStatusLabel->setText(tr("Card not initialized, please register"));
@@ -946,9 +983,9 @@ void IEEE14443ControlWidget::handleParkingFlow()
         lastEntryTimeMap.remove(currentCardId);
         return;
     }
-    //记录当前时间
+    //4.记录当前时间
     QDateTime now = QDateTime::currentDateTime();
-    //若entryTimeMap包括当前卡号——出场
+    //5.若entryTimeMap包括当前卡号——出场
     if(entryTimeMap.contains(currentCardId))
     {
         if(parkingFlowState == ParkingFlowIdle)
@@ -958,11 +995,11 @@ void IEEE14443ControlWidget::handleParkingFlow()
             stopAutoSearch();
             ui->parkingStatusLabel->setText(tr("正在出场中，不要收卡"));
         }
-        //获取入场时间
+        //6.获取入场时间
         QDateTime enter = entryTimeMap.value(currentCardId);
-        //算钱
+        //7.计算费用
         int fee = pendingExitFee > 0 ? pendingExitFee : calculateFee(enter, now);
-        //钱不够，提醒
+        //8.余额不足时进入充值流程
         if(currentInfo.balance < fee)
         {
             //ui提醒
@@ -974,7 +1011,7 @@ void IEEE14443ControlWidget::handleParkingFlow()
             return;
         }
 
-        //移除入场时间信息
+        //9.更新出场时间与扣费信息
         entryTimeMap.remove(currentCardId);
         activeInfoMap.remove(currentCardId);
         updateParkingTable();
@@ -989,15 +1026,16 @@ void IEEE14443ControlWidget::handleParkingFlow()
         ui->parkingStatusLabel->setText(tr("正在出场中，不要收卡"));
         updateInfoPanel(currentInfo, QDateTime(), now);
 
-        //不需要读回
+        //10.出场写卡不读回
         refreshAfterWrite = false;
 
-        //写入当前信息
+        //11.写入当前信息
         parkingExitWritePending = true;
         writeUpdatedInfo(currentInfo);
     }
     else//入场
     {
+        //12.入场流程更新
         if(parkingFlowState == ParkingFlowIdle)
         {
             parkingFlowState = ParkingFlowEntry;
@@ -1022,22 +1060,22 @@ void IEEE14443ControlWidget::handleParkingFlow()
 // 功能：写回更新后的卡信息。
 void IEEE14443ControlWidget::writeUpdatedInfo(const TagInfo &info)
 {
-    //检查是否认证
+    //1.检查是否认证
     if(!tagAuthenticated)
     {
         QMessageBox::warning(this, tr("Warning"), tr("authenticate first"));
         return;
     }
-    //把车主信息编写成块
+    //2.把车主信息编写成块
     QByteArray b1;
     QByteArray b2;
     encodeTagInfo(info, b1, b2);
-    //生成待写入信息
+    //3.生成待写入信息
     pendingWriteInfo = info;
-    //写入b1
+    //4.写入b1
     requestWrite(kUserBlock1, b1);
 
-    //保存待写入info的副本
+    //5.保存待写入info的副本
     lastBlock1 = b1;
     lastBlock2 = b2;
 }
@@ -1046,7 +1084,9 @@ void IEEE14443ControlWidget::writeUpdatedInfo(const TagInfo &info)
 // 功能：启动等待回包超时计时。
 void IEEE14443ControlWidget::startReplyTimeout(quint8 command)
 {
+    //1.保留接口参数
     Q_UNUSED(command);
+    //2.启动计时器
     if(!replyTimeoutTimer)
         return;
     replyTimeoutTimer->setInterval(replyTimeoutMs);
@@ -1056,6 +1096,7 @@ void IEEE14443ControlWidget::startReplyTimeout(quint8 command)
 // 功能：处理回包超时失败逻辑。
 void IEEE14443ControlWidget::handleReplyTimeoutFailure(int command)
 {
+    //1.寻卡指令超时处理
     if(command == IEEE1443Package::SearchCard)
     {
         if(registrationAwaitingRemoval)
@@ -1074,6 +1115,7 @@ void IEEE14443ControlWidget::handleReplyTimeoutFailure(int command)
         return;
     }
 
+    //2.其他指令超时处理
     if(command == IEEE1443Package::ReadCard)
         pendingReadBlock = -1;
     if(command == IEEE1443Package::WriteCard)
@@ -1085,14 +1127,17 @@ void IEEE14443ControlWidget::handleReplyTimeoutFailure(int command)
 // 功能：判断是否为重复响应包。
 bool IEEE14443ControlWidget::isDuplicateResponse(const IEEE1443Package &pkg)
 {
+    //1.生成去重签名
     const int kDuplicateWindowMs = 800;
     QString signature = QString::number(pkg.command()) + ":" + QString(pkg.data().toHex());
     QDateTime now = QDateTime::currentDateTime();
+    //2.判断是否在去重窗口内重复
     if(recentReplyTimestamps.contains(signature))
     {
         if(recentReplyTimestamps.value(signature).msecsTo(now) <= kDuplicateWindowMs)
             return true;
     }
+    //3.记录当前响应时间
     recentReplyTimestamps.insert(signature, now);
     pruneRecentReplies();
     return false;
@@ -1101,6 +1146,7 @@ bool IEEE14443ControlWidget::isDuplicateResponse(const IEEE1443Package &pkg)
 // 功能：清理历史响应记录。
 void IEEE14443ControlWidget::pruneRecentReplies()
 {
+    //1.清理超过保留窗口的响应记录
     const int kKeepWindowMs = 3000;
     QDateTime now = QDateTime::currentDateTime();
     QHash<QString, QDateTime>::iterator it = recentReplyTimestamps.begin();
@@ -1117,12 +1163,14 @@ void IEEE14443ControlWidget::pruneRecentReplies()
 // 功能：串口数据就绪事件处理。
 void IEEE14443ControlWidget::onPortDataReady()
 {
+    //1.读取串口可用数据
     QByteArray bytes;
     int a = commPort->bytesAvailable();
     bytes.resize(a);
     char *p = bytes.data();
     int len = bytes.size();
     commPort->read(p, len);
+    //2.按协议解析数据包
     while(len--)
     {
         switch(recvStatus)
@@ -1448,24 +1496,32 @@ void IEEE14443ControlWidget::onRecvedPackage(QByteArray pkg)
 // 功能：状态列表滚动范围变化处理。
 void IEEE14443ControlWidget::onStatusListScrollRangeChanced(int min, int max)
 {
+    //1.保留接口参数
+    Q_UNUSED(min);
+    Q_UNUSED(max);
 //    ui->statusList->verticalScrollBar()->setValue(max);
 }
 
 // 功能：自动寻卡定时器超时处理。
 void IEEE14443ControlWidget::onAutoSearchTimeout()
 {
+    //1.暂停状态不自动寻卡
     if(registrationPaused || rechargePaused || requiresInitialization || parkingFlowPaused)
         return;
+    //2.已在寻卡则跳过
     if(autoSearchInProgress)
         return;
+    //3.发送寻卡请求
     requestSearch();//每过一小段时间，就请求寻卡
 }
 
 // 功能：等待回包超时处理。
 void IEEE14443ControlWidget::onReplyTimeout()
 {
+    //1.检查是否存在待回复指令
     if(!waitingReply || pendingCommand < 0)
         return;
+    //2.进入重试流程
     if(pendingRetries < maxReplyRetries)
     {
         pendingRetries++;
@@ -1477,6 +1533,7 @@ void IEEE14443ControlWidget::onReplyTimeout()
             return;
         }
     }
+    //3.重试失败后的清理逻辑
     int failedCommand = pendingCommand;
     waitingReply = false;
     pendingCommand = -1;
